@@ -1,0 +1,28 @@
+# Virtual Environment
+venv/
+env/
+ENV/
+
+# Python cache files
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Game save files
+*.model
+
+# Distribution / packaging
+dist/
+build/
+*.egg-info/
+
+# Mac specific files
+.DS_Store
+
+# IDE files
+.idea/
+.vscode/
+*.swp
+*.swo 
