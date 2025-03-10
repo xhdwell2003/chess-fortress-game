@@ -42,6 +42,11 @@ class GameManager:
         self.charging = False
         self.max_strength = 2000
         
+        # 拖放功能相关变量
+        self.dragging = False
+        self.drag_piece = None
+        self.drag_offset = (0, 0)
+        
         # 游戏界面设置
         self.draw_options = pymunk.pygame_util.DrawOptions(pygame.Surface((1, 1)))
         
@@ -130,9 +135,14 @@ class GameManager:
                         self.prepare_battle_phase()
                         print("通过按钮直接进入战斗阶段")
                     else:
-                        # 添加棋子
-                        self.add_chess_piece(mouse_pos[0], mouse_pos[1])
-                    
+                        # 创建并开始拖动一个新棋子
+                        x, y = mouse_pos
+                        
+                        # 确保不会在地面下方放置棋子
+                        if y < self.screen_height - 70:
+                            self.start_dragging(x, y)
+                            print(f"开始拖动{self.selected_chess_type.name}棋子")
+                        
                 elif self.current_state == GameState.BATTLE:
                     # 开始充能
                     self.charging = True
@@ -153,27 +163,40 @@ class GameManager:
                         print("游戏重置，返回主菜单")
         
         elif event.type == pygame.MOUSEBUTTONUP:
-            if event.button == 1 and self.charging and self.current_state == GameState.BATTLE:
-                # 结束充能，发射弹射物
-                self.charging = False
-                mouse_pos = pygame.mouse.get_pos()
+            if event.button == 1:
+                if self.dragging and (self.current_state == GameState.BUILDING_MODEL_P1 or 
+                                   self.current_state == GameState.BUILDING_MODEL_P2):
+                    # 放置拖动中的棋子
+                    self.stop_dragging()
                 
-                # 计算发射方向
-                if self.projectile:
-                    dx = mouse_pos[0] - self.projectile.body.position.x
-                    dy = mouse_pos[1] - self.projectile.body.position.y
-                    angle = math.atan2(dy, dx)
+                elif self.charging and self.current_state == GameState.BATTLE:
+                    # 结束充能，发射弹射物
+                    self.charging = False
+                    mouse_pos = pygame.mouse.get_pos()
                     
-                    # 发射方向向量
-                    dir_x = math.cos(angle)
-                    dir_y = math.sin(angle)
-                    
-                    # 应用冲量发射弹射物
-                    strength = min(self.shoot_strength, self.max_strength)
-                    self.projectile.apply_impulse(pymunk.Vec2d(dir_x, dir_y), strength)
-                    
-                    # 切换玩家
-                    self.active_player = 2 if self.active_player == 1 else 1
+                    # 计算发射方向
+                    if self.projectile:
+                        dx = mouse_pos[0] - self.projectile.body.position.x
+                        dy = mouse_pos[1] - self.projectile.body.position.y
+                        angle = math.atan2(dy, dx)
+                        
+                        # 发射方向向量
+                        dir_x = math.cos(angle)
+                        dir_y = math.sin(angle)
+                        
+                        # 应用冲量发射弹射物
+                        strength = min(self.shoot_strength, self.max_strength)
+                        self.projectile.apply_impulse(pymunk.Vec2d(dir_x, dir_y), strength)
+                        
+                        # 切换玩家
+                        self.active_player = 2 if self.active_player == 1 else 1
+        
+        elif event.type == pygame.MOUSEMOTION:
+            # 如果正在拖动棋子，更新棋子位置
+            if self.dragging and self.drag_piece:
+                mouse_pos = pygame.mouse.get_pos()
+                self.drag_piece.body.position = (mouse_pos[0] - self.drag_offset[0], 
+                                               mouse_pos[1] - self.drag_offset[1])
         
         elif event.type == pygame.KEYDOWN:
             if event.key == pygame.K_1:
@@ -206,13 +229,16 @@ class GameManager:
                 self.current_state = GameState.BATTLE
                 self.active_player = 1
                 self.prepare_battle_phase()
+            # 添加旋转控制 - 方向键旋转当前拖动的棋子
+            elif self.dragging and self.drag_piece:
+                rotation_step = 15  # 每次旋转15度
+                if event.key == pygame.K_LEFT:
+                    self.drag_piece.body.angle += math.radians(rotation_step)
+                    print(f"棋子逆时针旋转 {rotation_step} 度")
+                elif event.key == pygame.K_RIGHT:
+                    self.drag_piece.body.angle -= math.radians(rotation_step)
+                    print(f"棋子顺时针旋转 {rotation_step} 度")
                 
-    def add_chess_piece(self, x, y):
-        """添加棋子到当前玩家的模型中"""
-        current_model = self.player1_model if self.current_state == GameState.BUILDING_MODEL_P1 else self.player2_model
-        piece = ChessPiece(x, y, self.selected_chess_type, self.space)
-        current_model.add_piece(piece)
-        
     def load_models(self):
         """加载已保存的模型"""
         self.player1_model = ChessModel.load("player1_model", self.space) or ChessModel(1)
@@ -276,6 +302,15 @@ class GameManager:
         current_chess = self.font.render(f"当前棋子: {self.selected_chess_type.name}", True, (0, 0, 255))
         screen.blit(current_chess, (20, 100))
         
+        # 绘制拖放提示
+        drag_hint = self.font.render("点击并拖动来搭建棋子", True, (0, 0, 255))
+        screen.blit(drag_hint, (20, 140))
+        
+        # 如果正在拖动，显示旋转提示
+        if self.dragging:
+            rotate_hint = self.font.render("使用左右方向键旋转棋子", True, (255, 0, 0))
+            screen.blit(rotate_hint, (20, 180))
+        
         # 绘制保存提示
         save_hint = self.font.render("按 S 键保存模型并继续", True, (0, 0, 255))
         screen.blit(save_hint, (self.screen_width - save_hint.get_width() - 20, 60))
@@ -291,6 +326,10 @@ class GameManager:
         current_model = self.player1_model if player_name == "玩家1" else self.player2_model
         for piece in current_model.pieces:
             piece.draw(screen, self.draw_options)
+            
+        # 绘制正在拖动的棋子
+        if self.dragging and self.drag_piece:
+            self.drag_piece.draw(screen, self.draw_options)
             
     def draw_battle_phase(self, screen):
         """绘制战斗阶段"""
@@ -397,6 +436,10 @@ class GameManager:
         print(f"玩家1模型棋子数: {len(self.player1_model.pieces)}")
         print(f"玩家2模型棋子数: {len(self.player2_model.pieces)}")
         
+        # 确保我们不在拖动状态
+        self.dragging = False
+        self.drag_piece = None
+        
         # 重新定位玩家1的模型到左侧
         offset_x1 = 200
         for piece in self.player1_model.pieces:
@@ -413,4 +456,37 @@ class GameManager:
         self.projectile = None
         self.charging = False
         self.shoot_strength = 0
-        print("战斗阶段准备完毕") 
+        print("战斗阶段准备完毕")
+
+    def start_dragging(self, x, y):
+        """开始拖动一个新棋子"""
+        # 创建新棋子
+        radius = 20  # 基础半径
+        piece = ChessPiece(x, y, self.selected_chess_type, self.space, radius=radius)
+        
+        # 设置拖动状态
+        self.dragging = True
+        self.drag_piece = piece
+        
+        # 设置偏移量为0（鼠标点正好在棋子中心）
+        self.drag_offset = (0, 0)
+        
+        # 临时关闭重力，使棋子可以自由移动
+        self.drag_piece.body.body_type = pymunk.Body.KINEMATIC
+        
+    def stop_dragging(self):
+        """停止拖动并放置棋子"""
+        if self.drag_piece:
+            # 重新启用物理特性
+            self.drag_piece.body.body_type = pymunk.Body.DYNAMIC
+            
+            # 添加到当前玩家的模型中
+            current_model = self.player1_model if self.current_state == GameState.BUILDING_MODEL_P1 else self.player2_model
+            current_model.add_piece(self.drag_piece)
+            
+            print(f"棋子已放置在 ({int(self.drag_piece.body.position.x)}, {int(self.drag_piece.body.position.y)})")
+            
+        # 重置拖动状态
+        self.dragging = False
+        self.drag_piece = None
+        self.drag_offset = (0, 0) 
