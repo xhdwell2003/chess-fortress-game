@@ -14,233 +14,85 @@ class ChessPieceType(Enum):
 
 # 棋子基类
 class ChessPiece:
-    def __init__(self, x, y, chess_type, space, radius=20, mass=10.0, auto_add_to_space=True):
+    def __init__(self, x, y, space, chess_type, radius=20, mass=10.0):
         self.chess_type = chess_type
-        self.shape_type = None  # 形状类型：'circle', 'rect', 'square'
-        self.color = None
-        self.space = space  # 保存对物理空间的引用
-        self.is_static = False  # 是否为静态棋子
         
-        # 设置不同类型棋子的形状、颜色和物理属性
+        # 创建棋子的物理body
+        moment = pymunk.moment_for_circle(mass, 0, radius)
+        self.body = pymunk.Body(mass, moment)
+        self.body.position = (x, y)
+        
+        # 根据棋子类型创建不同形状
         if chess_type == ChessPieceType.MILITARY_CHESS:
-            # 军棋：长方形
-            width, height = radius * 2.2, radius * 1.2
-            moment = pymunk.moment_for_box(mass, (width, height))
-            self.body = pymunk.Body(mass, moment)
-            self.body.position = x, y
-            self.shape = pymunk.Poly.create_box(self.body, (width, height))
-            self.color = (0, 150, 0)  # 绿色
-            self.shape.elasticity = 0.3  # 降低弹性
-            self.shape.friction = 0.9  # 增加摩擦力
-            self.width = width
-            self.height = height
-            self.shape_type = 'rect'
-            
-        elif chess_type == ChessPieceType.CHINESE_CHESS:
-            # 象棋：正方形
-            size = radius * 1.8
-            moment = pymunk.moment_for_box(mass, (size, size))
-            self.body = pymunk.Body(mass, moment)
-            self.body.position = x, y
-            self.shape = pymunk.Poly.create_box(self.body, (size, size))
-            self.color = (150, 0, 0)  # 红色
-            self.shape.elasticity = 0.4
-            self.shape.friction = 0.8
-            self.size = size
-            self.shape_type = 'square'
-            
-        else:  # GO_CHESS
-            # 围棋：圆形
-            self.body = pymunk.Body(mass, pymunk.moment_for_circle(mass, 0, radius))
-            self.body.position = x, y
+            # 军棋（圆形）
             self.shape = pymunk.Circle(self.body, radius)
-            self.color = (0, 0, 0) if pygame.time.get_ticks() % 2 == 0 else (255, 255, 255)  # 黑色或白色
-            self.shape.elasticity = 0.5
-            self.shape.friction = 0.7
-            self.radius = radius * 0.8
-            self.shape_type = 'circle'
+            self.shape_type = "circle"
+        elif chess_type == ChessPieceType.CHINESE_CHESS:
+            # 象棋（方形）
+            self.shape = pymunk.Poly.create_box(self.body, (radius*2, radius*2))
+            self.shape_type = "box"
+        elif chess_type == ChessPieceType.GO_CHESS:
+            # 围棋（三角形）
+            triangle_vertices = [
+                (-radius, radius), 
+                (radius, radius), 
+                (0, -radius)
+            ]
+            self.shape = pymunk.Poly(self.body, triangle_vertices)
+            self.shape_type = "triangle"
         
-        # 设置碰撞类型和组，确保棋子之间可以正常碰撞
-        self.shape.collision_type = 1
+        # 设置物理属性
+        self.shape.elasticity = 0.5
+        self.shape.friction = 0.9
+        self.radius = radius
         
-        # 防止棋子飞出屏幕，增加碰撞回调函数
-        def limit_velocity(body, gravity, damping, dt):
-            max_velocity = 500  # 最大速度限制
-            if body.velocity.length > max_velocity:
-                scale = max_velocity / body.velocity.length
-                body.velocity = body.velocity * scale
-                
-            # 限制最大角速度
-            max_angular_velocity = 5.0  # 最大角速度限制
-            if abs(body.angular_velocity) > max_angular_velocity:
-                body.angular_velocity = max_angular_velocity * (1 if body.angular_velocity > 0 else -1)
-                
-            # 正常的速度更新
-            pymunk.Body.update_velocity(body, gravity, damping, dt)
-            
-        # 应用速度限制函数
-        self.body.velocity_func = limit_velocity
-            
-        # 只有在auto_add_to_space为True时才添加到物理空间
-        if auto_add_to_space and space is not None:
-            try:
-                space.add(self.body, self.shape)
-                print(f"棋子已自动添加到物理空间，类型: {chess_type.name}")
-            except Exception as e:
-                print(f"自动添加棋子到物理空间失败: {e}")
-        
-    def make_static(self):
-        """将棋子转为静态，不再受物理影响"""
-        if not self.is_static and self.space is not None:
-            try:
-                # 移除当前body
-                self.space.remove(self.body, self.shape)
-                
-                # 创建一个静态body
-                static_body = pymunk.Body(body_type=pymunk.Body.STATIC)
-                static_body.position = self.body.position
-                static_body.angle = self.body.angle
-                
-                # 创建对应的shape
-                if self.shape_type == 'rect':
-                    static_shape = pymunk.Poly.create_box(static_body, (self.width, self.height))
-                elif self.shape_type == 'square':
-                    static_shape = pymunk.Poly.create_box(static_body, (self.size, self.size))
-                else:  # circle
-                    static_shape = pymunk.Circle(static_body, self.radius)
-                
-                # 复制物理属性
-                static_shape.elasticity = self.shape.elasticity
-                static_shape.friction = self.shape.friction
-                static_shape.collision_type = self.shape.collision_type
-                
-                # 添加到空间
-                self.space.add(static_body, static_shape)
-                
-                # 更新引用
-                self.body = static_body
-                self.shape = static_shape
-                self.is_static = True
-                
-                print("棋子转为静态成功")
-                return True
-            except Exception as e:
-                print(f"转为静态失败: {e}")
-                return False
-        return False
+        # 添加到物理空间
+        space.add(self.body, self.shape)
     
-    def add_to_space(self):
-        """显式地将棋子添加到物理空间"""
-        if self.space:
-            try:
-                self.space.add(self.body, self.shape)
-                return True
-            except Exception as e:
-                print(f"添加棋子到空间失败: {e}")
-                return False
-        return False
-    
-    def remove_from_space(self):
-        """从物理空间中移除棋子"""
-        if self.space:
-            try:
-                self.space.remove(self.body, self.shape)
-                return True
-            except Exception as e:
-                print(f"从空间移除棋子失败: {e}")
-                return False
-        return False
-        
-    def draw(self, screen, draw_options):
-        # 根据形状类型绘制棋子
-        try:
-            if self.shape_type == 'circle':
-                # 绘制圆形棋子(围棋)
-                try:
-                    pygame.draw.circle(screen, self.color, 
-                                     (int(self.body.position.x), int(self.body.position.y)), 
-                                     int(self.radius))
-                    
-                    # 绘制棋子边缘
-                    pygame.draw.circle(screen, (50, 50, 50), 
-                                     (int(self.body.position.x), int(self.body.position.y)), 
-                                     int(self.radius), 2)
-                except (ValueError, TypeError):
-                    # 忽略无效的坐标值
-                    pass
+    @staticmethod
+    def draw_at_body_position(screen, piece, chess_type):
+        """静态方法，在指定位置绘制棋子"""
+        if piece and hasattr(piece, 'body'):
+            x, y = int(piece.body.position.x), int(piece.body.position.y)
+            radius = getattr(piece, 'radius', 20)
             
-            elif self.shape_type == 'rect':
-                # 绘制长方形棋子(军棋)
-                try:
-                    # 计算四个角的坐标，考虑旋转角度
-                    vertices = self.shape.get_vertices()
-                    points = []
-                    valid_points = True
-                    
-                    for v in vertices:
-                        # 从局部坐标转换为全局坐标
-                        point = v.rotated(self.body.angle) + self.body.position
-                        if math.isnan(point.x) or math.isnan(point.y):
-                            # 跳过无效坐标
-                            valid_points = False
-                            break
-                        points.append((int(point.x), int(point.y)))
-                        
-                    # 绘制填充多边形和边框
-                    if valid_points and len(points) >= 3:
-                        pygame.draw.polygon(screen, self.color, points)
-                        pygame.draw.polygon(screen, (50, 50, 50), points, 2)
-                    else:
-                        # 如果点无效，退回到简单的矩形绘制
-                        x, y = int(self.body.position.x), int(self.body.position.y)
-                        pygame.draw.rect(screen, self.color, (x - int(self.width/2), y - int(self.height/2), 
-                                                          int(self.width), int(self.height)))
-                except (ValueError, TypeError, AttributeError):
-                    # 忽略无效的坐标值
-                    try:
-                        # 退回到简单矩形
-                        x, y = int(self.body.position.x), int(self.body.position.y)
-                        pygame.draw.rect(screen, self.color, (x - int(self.width/2), y - int(self.height/2), 
-                                                          int(self.width), int(self.height)))
-                    except:
-                        pass
-                
-            elif self.shape_type == 'square':
-                # 绘制正方形棋子(象棋)
-                try:
-                    vertices = self.shape.get_vertices()
-                    points = []
-                    valid_points = True
-                    
-                    for v in vertices:
-                        point = v.rotated(self.body.angle) + self.body.position
-                        if math.isnan(point.x) or math.isnan(point.y):
-                            # 跳过无效坐标
-                            valid_points = False
-                            break
-                        points.append((int(point.x), int(point.y)))
-                        
-                    # 绘制填充多边形和边框
-                    if valid_points and len(points) >= 3:
-                        pygame.draw.polygon(screen, self.color, points)
-                        pygame.draw.polygon(screen, (50, 50, 50), points, 2)
-                    else:
-                        # 如果点无效，退回到简单的矩形绘制
-                        x, y = int(self.body.position.x), int(self.body.position.y)
-                        pygame.draw.rect(screen, self.color, (x - int(self.size/2), y - int(self.size/2), 
-                                                          int(self.size), int(self.size)))
-                except (ValueError, TypeError, AttributeError):
-                    # 忽略无效的坐标值
-                    try:
-                        # 退回到简单矩形
-                        x, y = int(self.body.position.x), int(self.body.position.y)
-                        pygame.draw.rect(screen, self.color, (x - int(self.size/2), y - int(self.size/2), 
-                                                          int(self.size), int(self.size)))
-                    except:
-                        pass
-        except Exception as e:
-            # 捕获所有可能的绘制错误
-            print(f"绘制棋子时出错: {e}")
+            if chess_type == ChessPieceType.MILITARY_CHESS:
+                # 军棋（圆形）
+                pygame.draw.circle(screen, (255, 0, 0), (x, y), radius)
+            elif chess_type == ChessPieceType.CHINESE_CHESS:
+                # 象棋（方形）
+                pygame.draw.rect(screen, (0, 255, 0), 
+                               (x - radius, y - radius, radius*2, radius*2))
+            elif chess_type == ChessPieceType.GO_CHESS:
+                # 围棋（三角形）
+                points = [
+                    (x, y - radius),
+                    (x - radius, y + radius),
+                    (x + radius, y + radius)
+                ]
+                pygame.draw.polygon(screen, (0, 0, 255), points)
+    
+    def draw(self, screen):
+        """绘制棋子到屏幕上"""
+        if hasattr(self, 'body') and hasattr(self.body, 'position'):
+            x, y = int(self.body.position.x), int(self.body.position.y)
+            
+            if self.chess_type == ChessPieceType.MILITARY_CHESS:
+                # 军棋（圆形）
+                pygame.draw.circle(screen, (255, 0, 0), (x, y), self.radius)
+            elif self.chess_type == ChessPieceType.CHINESE_CHESS:
+                # 象棋（方形）
+                pygame.draw.rect(screen, (0, 255, 0), 
+                               (x - self.radius, y - self.radius, 
+                                self.radius*2, self.radius*2))
+            elif self.chess_type == ChessPieceType.GO_CHESS:
+                # 围棋（三角形）
+                points = [
+                    (x, y - self.radius),
+                    (x - self.radius, y + self.radius),
+                    (x + self.radius, y + self.radius)
+                ]
+                pygame.draw.polygon(screen, (0, 0, 255), points)
 
 # 弹射物（圆珠笔芯）
 class Projectile:
@@ -365,7 +217,7 @@ class ChessModel:
                             angle = piece_data.get('angle', 0)
                             
                         chess_type = ChessPieceType(chess_type_value)
-                        piece = ChessPiece(x, y, chess_type, space)
+                        piece = ChessPiece(x, y, space, chess_type)
                         piece.body.angle = angle  # 设置旋转角度
                         model.add_piece(piece)
                     except Exception as e:

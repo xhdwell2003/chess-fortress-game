@@ -4,14 +4,15 @@ import pymunk
 import pymunk.pygame_util
 import math
 from game_objects import ChessPiece, ChessPieceType, Projectile, ChessModel
+import sys
 
 # 游戏状态枚举
 class GameState(Enum):
     MAIN_MENU = 0
-    BUILDING_MODEL_P1 = 1
-    BUILDING_MODEL_P2 = 2
+    BUILDING_PHASE = 1
     BATTLE = 3
     GAME_OVER = 4
+    RULES = 5
 
 # 游戏管理类
 class GameManager:
@@ -22,8 +23,8 @@ class GameManager:
         
         # 初始化物理空间
         self.space = pymunk.Space()
-        self.space.gravity = (0, 50)  # 极小的重力，几乎接近零
-        self.space.damping = 0.95  # 非常高的阻尼，减少振动和移动
+        self.space.gravity = (0, 50)  # 重力
+        self.space.damping = 0.95  # 阻尼
         
         # 创建地面
         self.create_ground()
@@ -33,6 +34,7 @@ class GameManager:
         self.player2_model = ChessModel(2)
         
         # 当前活动玩家
+        self.current_player = 1
         self.active_player = 1
         
         # 弹射物
@@ -48,17 +50,22 @@ class GameManager:
         self.drag_piece = None
         self.drag_offset = (0, 0)
         
+        # 游戏胜利者
+        self.winner = None
+        
         # 游戏界面设置
         self.draw_options = pymunk.pygame_util.DrawOptions(pygame.Surface((1, 1)))
         
         # 初始化支持中文的字体
         try:
             # 使用arialunicode字体，这个字体在系统中支持中文
-            self.font = pygame.font.SysFont("arialunicode", 28, bold=True)  # 增大字体并设置为粗体提高可读性
+            self.font = pygame.font.SysFont("arialunicode", 18, bold=False)  # 减小字体并取消粗体
+            self.small_font = pygame.font.SysFont("arialunicode", 14, bold=False)  # 更小的字体用于标签等
         except:
             # 如果上述字体不可用，尝试使用系统默认字体
             font_default = pygame.font.get_default_font()
-            self.font = pygame.font.Font(font_default, 28)
+            self.font = pygame.font.Font(font_default, 18)
+            self.small_font = pygame.font.Font(font_default, 14)
         
         # 棋子选择
         self.selected_chess_type = ChessPieceType.MILITARY_CHESS
@@ -157,30 +164,19 @@ class GameManager:
                 
                 # 根据当前状态处理点击事件
                 if self.current_state == GameState.MAIN_MENU:
-                    # 检查开始游戏按钮
-                    if 300 <= mouse_pos[0] <= 500 and 250 <= mouse_pos[1] <= 300:
-                        self.current_state = GameState.BUILDING_MODEL_P1
-                        print("进入玩家1建模阶段")
-                    # 检查加载模型按钮
-                    elif 300 <= mouse_pos[0] <= 500 and 350 <= mouse_pos[1] <= 400:
-                        self.load_models()
-                        self.current_state = GameState.BATTLE
-                        print("加载模型并进入战斗阶段")
-                        self.prepare_battle_phase()
+                    # 主菜单的点击处理由draw_main_menu方法处理
+                    pass
                         
-                elif self.current_state == GameState.BUILDING_MODEL_P1 or self.current_state == GameState.BUILDING_MODEL_P2:
+                elif self.current_state == GameState.BUILDING_PHASE:
                     # 检查玩家2的"进入战斗"按钮
-                    if (self.current_state == GameState.BUILDING_MODEL_P2 and 
-                        self.screen_width - 150 <= mouse_pos[0] <= self.screen_width - 20 and
-                        100 <= mouse_pos[1] <= 140):
-                        # 先保存玩家2的模型
-                        self.player2_model.save("player2_model")
-                        print("点击进入战斗按钮，玩家2模型已保存")
+                    if (self.current_player == 2 and 
+                        self.screen_width - 120 <= mouse_pos[0] <= self.screen_width - 20 and
+                        70 <= mouse_pos[1] <= 100):
                         # 设置战斗状态
                         self.current_state = GameState.BATTLE
                         self.active_player = 1
                         self.prepare_battle_phase()
-                        print("通过按钮直接进入战斗阶段")
+                        print("进入战斗阶段")
                     else:
                         # 创建并开始拖动一个新棋子
                         x, y = mouse_pos
@@ -216,8 +212,7 @@ class GameManager:
         
         elif event.type == pygame.MOUSEBUTTONUP:
             if event.button == 1:
-                if self.dragging and (self.current_state == GameState.BUILDING_MODEL_P1 or 
-                                   self.current_state == GameState.BUILDING_MODEL_P2):
+                if self.dragging and self.current_state == GameState.BUILDING_PHASE:
                     # 放置拖动中的棋子
                     self.stop_dragging()
                 
@@ -260,21 +255,18 @@ class GameManager:
             elif event.key == pygame.K_3:
                 self.selected_chess_type = ChessPieceType.GO_CHESS
                 print("选择围棋")
-            elif event.key == pygame.K_s and (self.current_state == GameState.BUILDING_MODEL_P1 or 
-                                            self.current_state == GameState.BUILDING_MODEL_P2):
-                # 保存当前模型
-                if self.current_state == GameState.BUILDING_MODEL_P1:
-                    self.player1_model.save("player1_model")
-                    self.current_state = GameState.BUILDING_MODEL_P2
-                    print("玩家1模型已保存，进入玩家2建模阶段")
+            elif event.key == pygame.K_s and self.current_state == GameState.BUILDING_PHASE:
+                # 保存当前模型并切换玩家
+                if self.current_player == 1:
+                    print("玩家1完成建造，切换到玩家2")
+                    self.current_player = 2
                 else:
-                    self.player2_model.save("player2_model")
-                    print("玩家2模型已保存，准备进入战斗阶段")
+                    print("玩家2完成建造，准备进入战斗阶段")
                     self.current_state = GameState.BATTLE
                     # 初始化战斗阶段
                     self.active_player = 1  # 确保玩家1先攻击
-                    self.prepare_battle_phase()  # 添加新方法准备战斗阶段
-                    print(f"当前游戏状态: {self.current_state}, 活动玩家: {self.active_player}")
+                    self.prepare_battle_phase()
+                    print("进入战斗阶段")
             # 添加键盘快捷键进入战斗模式（用于调试）
             elif event.key == pygame.K_b and self.current_state != GameState.BATTLE:
                 print("使用快捷键强制进入战斗阶段")
@@ -301,45 +293,34 @@ class GameManager:
         self.player2_model = ChessModel.load("player2_model", self.space) or ChessModel(2)
         
     def draw(self, screen):
-        """绘制游戏"""
-        screen.fill((255, 255, 255))  # 白色背景
+        """绘制游戏场景"""
+        # 清除屏幕
+        screen.fill((200, 200, 200))
         
-        # 绘制地面
-        pygame.draw.line(screen, (0, 0, 0), 
-                        (0, self.screen_height - 50), 
-                        (self.screen_width, self.screen_height - 50), 5)
-        
-        # 根据当前状态绘制不同界面
+        # 根据游戏状态绘制不同内容
         if self.current_state == GameState.MAIN_MENU:
             self.draw_main_menu(screen)
-        elif self.current_state == GameState.BUILDING_MODEL_P1:
-            self.draw_building_phase(screen, "玩家1")
-            # 显示棋子数量
-            pieces_count = len(self.player1_model.pieces)
-            count_text = self.font.render(f"当前棋子数量: {pieces_count}", True, (0, 0, 0))
-            screen.blit(count_text, (20, self.screen_height - 60))
-        elif self.current_state == GameState.BUILDING_MODEL_P2:
-            self.draw_building_phase(screen, "玩家2")
-            # 显示棋子数量
-            pieces_count = len(self.player2_model.pieces)
-            count_text = self.font.render(f"当前棋子数量: {pieces_count}", True, (0, 0, 0))
-            screen.blit(count_text, (20, self.screen_height - 60))
+        elif self.current_state == GameState.BUILDING_PHASE:
+            player_name = "玩家1" if self.current_player == 1 else "玩家2"
+            self.draw_building_phase(screen, player_name)
         elif self.current_state == GameState.BATTLE:
             self.draw_battle_phase(screen)
         elif self.current_state == GameState.GAME_OVER:
             self.draw_game_over(screen)
+        elif self.current_state == GameState.RULES:
+            self.draw_rules(screen)
             
         # 在任何状态下都显示调试信息和快捷键提示
-        debug_info = self.font.render(f"当前状态: {self.current_state.name}", True, (100, 100, 100))
-        screen.blit(debug_info, (10, self.screen_height - 30))
+        debug_info = self.small_font.render(f"当前状态: {self.current_state.name}", True, (100, 100, 100))
+        screen.blit(debug_info, (10, self.screen_height - 20))
         
         # 调试绘制模式提示
-        debug_text = self.font.render("按D键切换调试绘制" if not self.debug_draw else "调试模式开启 (按D关闭)", True, (255, 0, 0) if self.debug_draw else (100, 100, 100))
-        screen.blit(debug_text, (self.screen_width - debug_text.get_width() - 10, self.screen_height - 30))
+        debug_text = self.small_font.render("按D键切换调试绘制" if not self.debug_draw else "调试模式开启 (按D关闭)", True, (255, 0, 0) if self.debug_draw else (100, 100, 100))
+        screen.blit(debug_text, (self.screen_width - debug_text.get_width() - 10, self.screen_height - 20))
         
         if self.current_state != GameState.BATTLE:
-            debug_hint = self.font.render("按B键直接进入战斗模式", True, (100, 100, 100))
-            screen.blit(debug_hint, (self.screen_width - debug_hint.get_width() - 10, self.screen_height - 60))
+            debug_hint = self.small_font.render("按B键直接进入战斗模式", True, (100, 100, 100))
+            screen.blit(debug_hint, (self.screen_width - debug_hint.get_width() - 10, self.screen_height - 40))
             
         # 如果启用了调试绘制，绘制所有物理对象
         if self.debug_draw:
@@ -354,117 +335,132 @@ class GameManager:
                 print(f"调试绘制出错: {e}")
             
     def draw_main_menu(self, screen):
-        """绘制主菜单"""
-        title = self.font.render("棋子堡垒对战游戏", True, (0, 0, 0))
-        screen.blit(title, (self.screen_width // 2 - title.get_width() // 2, 150))
+        """绘制游戏主菜单"""
+        screen.fill((50, 50, 50))  # 深灰色背景
         
-        # 开始游戏按钮
-        pygame.draw.rect(screen, (100, 100, 255), (300, 250, 200, 50))
-        start_text = self.font.render("开始游戏", True, (255, 255, 255))
-        screen.blit(start_text, (400 - start_text.get_width() // 2, 275 - start_text.get_height() // 2))
+        # 游戏标题
+        title = self.font.render("棋子堡垒", True, (255, 255, 255))
+        screen.blit(title, (self.screen_width // 2 - title.get_width() // 2, 50))
         
-        # 加载模型按钮
-        pygame.draw.rect(screen, (100, 255, 100), (300, 350, 200, 50))
-        load_text = self.font.render("加载模型", True, (0, 0, 0))
-        screen.blit(load_text, (400 - load_text.get_width() // 2, 375 - load_text.get_height() // 2))
+        # 创建开始游戏按钮
+        pygame.draw.rect(screen, (100, 100, 255), (self.screen_width // 2 - 80, 150, 160, 40))
+        start_text = self.small_font.render("开始游戏", True, (255, 255, 255))
+        screen.blit(start_text, (self.screen_width // 2 - start_text.get_width() // 2, 158))
+        
+        # 创建游戏规则按钮
+        pygame.draw.rect(screen, (100, 100, 255), (self.screen_width // 2 - 80, 210, 160, 40))
+        rules_text = self.small_font.render("游戏规则", True, (255, 255, 255))
+        screen.blit(rules_text, (self.screen_width // 2 - rules_text.get_width() // 2, 218))
+        
+        # 创建退出游戏按钮
+        pygame.draw.rect(screen, (100, 100, 255), (self.screen_width // 2 - 80, 270, 160, 40))
+        exit_text = self.small_font.render("退出游戏", True, (255, 255, 255))
+        screen.blit(exit_text, (self.screen_width // 2 - exit_text.get_width() // 2, 278))
+        
+        # 检测鼠标点击
+        if pygame.mouse.get_pressed()[0]:
+            mouse_pos = pygame.mouse.get_pos()
+            # 开始游戏按钮
+            if (self.screen_width // 2 - 80 <= mouse_pos[0] <= self.screen_width // 2 + 80 and 
+                150 <= mouse_pos[1] <= 190):
+                self.current_state = GameState.BUILDING_PHASE
+                self.current_player = 1
+                
+            # 游戏规则按钮
+            elif (self.screen_width // 2 - 80 <= mouse_pos[0] <= self.screen_width // 2 + 80 and 
+                 210 <= mouse_pos[1] <= 250):
+                self.current_state = GameState.RULES
+                
+            # 退出游戏按钮
+            elif (self.screen_width // 2 - 80 <= mouse_pos[0] <= self.screen_width // 2 + 80 and 
+                 270 <= mouse_pos[1] <= 310):
+                pygame.quit()
+                sys.exit()
         
     def draw_building_phase(self, screen, player_name):
-        """绘制建模阶段"""
-        # 绘制标题
-        title = self.font.render(f"{player_name} 建造阶段", True, (0, 0, 0))
-        screen.blit(title, (self.screen_width // 2 - title.get_width() // 2, 20))
+        """绘制建造阶段界面"""
+        # 绘制玩家标题
+        title = self.font.render(f"{player_name}建造阶段", True, (0, 0, 0))
+        screen.blit(title, (self.screen_width // 2 - 80, 10))
         
-        # 绘制棋子选择提示
-        chess_hint = self.font.render("按 1-3 键选择棋子类型: 1=军棋, 2=象棋, 3=围棋", True, (0, 0, 0))
-        screen.blit(chess_hint, (20, 60))
+        # 绘制玩家可用的棋子类型
+        chess_types = [
+            ("军棋(1)", ChessPieceType.MILITARY_CHESS, (40, 40)),
+            ("象棋(2)", ChessPieceType.CHINESE_CHESS, (100, 40)),
+            ("围棋(3)", ChessPieceType.GO_CHESS, (160, 40))
+        ]
         
-        # 显示当前选择的棋子类型
-        current_chess = self.font.render(f"当前棋子: {self.selected_chess_type.name}", True, (0, 0, 255))
-        screen.blit(current_chess, (20, 100))
-        
-        # 绘制拖放提示
-        drag_hint = self.font.render("点击并拖动来搭建棋子", True, (0, 0, 255))
-        screen.blit(drag_hint, (20, 140))
-        
-        # 如果正在拖动，显示旋转提示
-        if self.dragging:
-            rotate_hint = self.font.render("使用左右方向键旋转棋子", True, (255, 0, 0))
-            screen.blit(rotate_hint, (20, 180))
-            
-            # 显示当前拖放位置
-            pos_text = self.font.render(f"位置: ({int(self.drag_piece.body.position.x)}, {int(self.drag_piece.body.position.y)})", True, (255, 0, 0))
-            screen.blit(pos_text, (20, 210))
-        
-        # 绘制保存提示
-        save_hint = self.font.render("按 S 键保存模型并继续", True, (0, 0, 255))
-        screen.blit(save_hint, (self.screen_width - save_hint.get_width() - 20, 60))
-        
-        # 如果是玩家2的建模阶段，显示"进入战斗"按钮
-        if player_name == "玩家2":
-            pygame.draw.rect(screen, (255, 100, 100), (self.screen_width - 150, 100, 130, 40))
-            battle_text = self.font.render("进入战斗", True, (255, 255, 255))
-            screen.blit(battle_text, (self.screen_width - 150 + (130 - battle_text.get_width()) // 2, 
-                                   100 + (40 - battle_text.get_height()) // 2))
-        
-        # 显示已放置棋子的数量和位置信息
-        current_model = self.player1_model if player_name == "玩家1" else self.player2_model
-        pieces_count = len(current_model.pieces)
-        
-        # 在底部显示棋子计数
-        count_text = self.font.render(f"已放置棋子数量: {pieces_count}", True, (0, 0, 0))
-        screen.blit(count_text, (self.screen_width // 2 - count_text.get_width() // 2, self.screen_height - 80))
-        
-        # 手动绘制每个棋子，确保它们被绘制到屏幕上
-        for i, piece in enumerate(current_model.pieces):
-            try:
-                # 先绘制位置指示线，帮助调试
-                if hasattr(piece, 'body') and hasattr(piece.body, 'position'):
-                    x, y = int(piece.body.position.x), int(piece.body.position.y)
-                    # 垂直指示线到地面
-                    pygame.draw.line(screen, (200, 200, 200), (x, y), (x, self.screen_height - 50), 1)
-                    # 坐标文本
-                    if i < 10:  # 只显示前10个棋子的坐标，避免屏幕拥挤
-                        pos_label = self.font.render(f"#{i+1}", True, (100, 100, 100))
-                        screen.blit(pos_label, (x - 10, y - 30))
+        for i, (name, chess_type, pos) in enumerate(chess_types):
+            # 绘制棋子示例
+            if chess_type == ChessPieceType.MILITARY_CHESS:
+                # 军棋是圆形
+                pygame.draw.circle(screen, (255, 0, 0), pos, 15)
+            elif chess_type == ChessPieceType.CHINESE_CHESS:
+                # 象棋是方形
+                pygame.draw.rect(screen, (0, 255, 0), (pos[0]-15, pos[1]-15, 30, 30))
+            else:
+                # 围棋是三角形
+                points = [
+                    (pos[0], pos[1]-15),
+                    (pos[0]-15, pos[1]+15),
+                    (pos[0]+15, pos[1]+15)
+                ]
+                pygame.draw.polygon(screen, (0, 0, 255), points)
                 
-                # 绘制棋子
-                piece.draw(screen, self.draw_options)
-            except Exception as e:
-                print(f"绘制棋子 #{i+1} 失败: {e}")
-                # 备用方案：如果正常绘制失败，使用简单形状
-                if hasattr(piece, 'body') and hasattr(piece.body, 'position'):
-                    x, y = int(piece.body.position.x), int(piece.body.position.y)
-                    pygame.draw.circle(screen, (255, 0, 0), (x, y), 20)
+            # 绘制名称
+            text = self.small_font.render(name, True, (0, 0, 0))
+            screen.blit(text, (pos[0]-20, pos[1]+20))
             
-        # 最后绘制正在拖动的棋子，确保它在最上层
+        # 显示当前选择的棋子类型
+        selected_text = self.small_font.render(f"当前选择: {self.selected_chess_type.name}", True, (0, 0, 0))
+        screen.blit(selected_text, (20, 80))
+        
+        # 绘制提示文本
+        hint1 = self.small_font.render("拖放棋子到画面中以建造堡垒", True, (0, 0, 0))
+        screen.blit(hint1, (20, 100))
+        
+        hint2 = self.small_font.render("按S键结束当前玩家建造并切换", True, (0, 0, 0))
+        screen.blit(hint2, (20, 120))
+        
+        # 如果是玩家2，显示进入战斗的按钮
+        if self.current_player == 2:
+            pygame.draw.rect(screen, (255, 100, 100), 
+                           (self.screen_width - 120, 70, 100, 30))
+            battle_text = self.small_font.render("进入战斗", True, (0, 0, 0))
+            screen.blit(battle_text, (self.screen_width - 100, 78))
+        
+        # 绘制地面
+        pygame.draw.line(screen, (0, 0, 0), 
+                        (0, self.screen_height - 50), 
+                        (self.screen_width, self.screen_height - 50), 5)
+                        
+        # 绘制玩家棋子
+        current_model = self.player1_model if self.current_player == 1 else self.player2_model
+        for piece in current_model.pieces:
+            piece.draw(screen)
+            
+        # 如果正在拖动棋子，绘制它
         if self.dragging and self.drag_piece:
-            # 绘制半透明指示线至地面
-            ground_y = self.screen_height - 50
-            pos_x = int(self.drag_piece.body.position.x)
-            pos_y = int(self.drag_piece.body.position.y)
-            pygame.draw.line(screen, (200, 200, 200, 128), (pos_x, pos_y), (pos_x, ground_y), 1)
+            ChessPiece.draw_at_body_position(screen, self.drag_piece, self.selected_chess_type)
             
-            # 绘制棋子
-            try:
-                self.drag_piece.draw(screen, self.draw_options)
-            except Exception as e:
-                print(f"绘制拖动中的棋子出错: {e}")
-                # 如果正常绘制失败，尝试直接绘制一个圆形
-                pygame.draw.circle(screen, (255, 0, 0), (pos_x, pos_y), 20)
-            
+        # 显示棋子数量
+        pieces_count = len(current_model.pieces)
+        count_text = self.small_font.render(f"当前棋子数量: {pieces_count}", True, (0, 0, 0))
+        screen.blit(count_text, (20, self.screen_height - 30))
+        
     def draw_battle_phase(self, screen):
         """绘制战斗阶段"""
         # 绘制标题
         title = self.font.render(f"玩家{self.active_player}的回合", True, (0, 0, 0))
-        screen.blit(title, (self.screen_width // 2 - title.get_width() // 2, 20))
+        screen.blit(title, (self.screen_width // 2 - title.get_width() // 2, 10))
         
         # 绘制战斗指导信息
         if not self.charging and not self.projectile:
             guide_text1 = self.font.render("点击鼠标左键开始充能，松开发射笔芯攻击对方模型", True, (0, 0, 255))
-            screen.blit(guide_text1, (self.screen_width // 2 - guide_text1.get_width() // 2, 60))
+            screen.blit(guide_text1, (self.screen_width // 2 - guide_text1.get_width() // 2, 40))
             
             guide_text2 = self.font.render("玩家轮流攻击，直到一方模型散架", True, (0, 0, 255))
-            screen.blit(guide_text2, (self.screen_width // 2 - guide_text2.get_width() // 2, 90))
+            screen.blit(guide_text2, (self.screen_width // 2 - guide_text2.get_width() // 2, 60))
             
             # 绘制起始点提示
             start_x = 150 if self.active_player == 1 else self.screen_width - 150
@@ -487,11 +483,11 @@ class GameManager:
             self.shoot_strength = min(self.shoot_strength + 50, self.max_strength)
             charge_percent = self.shoot_strength / self.max_strength
             
-            pygame.draw.rect(screen, (200, 200, 200), (50, 50, 200, 20))
-            pygame.draw.rect(screen, (255, 0, 0), (50, 50, int(200 * charge_percent), 20))
+            pygame.draw.rect(screen, (200, 200, 200), (30, 40, 150, 15))
+            pygame.draw.rect(screen, (255, 0, 0), (30, 40, int(150 * charge_percent), 15))
             
             charge_text = self.font.render(f"力度: {int(charge_percent * 100)}%", True, (0, 0, 0))
-            screen.blit(charge_text, (260, 50))
+            screen.blit(charge_text, (190, 38))
 
             # 绘制方向指示线
             if self.projectile:
@@ -509,7 +505,7 @@ class GameManager:
         
         # 绘制胜利标题
         title = self.font.render(f"游戏结束! 玩家{self.winner}获胜!", True, (255, 255, 255))
-        screen.blit(title, (self.screen_width // 2 - title.get_width() // 2, self.screen_height // 2 - 80))
+        screen.blit(title, (self.screen_width // 2 - title.get_width() // 2, self.screen_height // 2 - 60))
         
         # 绘制游戏结果描述
         if self.winner == 1:
@@ -518,27 +514,27 @@ class GameManager:
             result_text = "玩家2的棋子堡垒坚固稳定，成功击溃了对手的防线!"
             
         result = self.font.render(result_text, True, (255, 255, 255))
-        screen.blit(result, (self.screen_width // 2 - result.get_width() // 2, self.screen_height // 2 - 30))
+        screen.blit(result, (self.screen_width // 2 - result.get_width() // 2, self.screen_height // 2 - 20))
         
         # 绘制返回主菜单按钮
-        pygame.draw.rect(screen, (100, 100, 255), (self.screen_width // 2 - 100, self.screen_height // 2 + 50, 200, 50))
+        pygame.draw.rect(screen, (100, 100, 255), (self.screen_width // 2 - 80, self.screen_height // 2 + 30, 160, 40))
         menu_text = self.font.render("返回主菜单", True, (255, 255, 255))
         screen.blit(menu_text, (self.screen_width // 2 - menu_text.get_width() // 2, 
-                              self.screen_height // 2 + 50 + (50 - menu_text.get_height()) // 2))
+                              self.screen_height // 2 + 30 + (40 - menu_text.get_height()) // 2))
         
         # 检查点击返回主菜单
         if pygame.mouse.get_pressed()[0]:
             mouse_pos = pygame.mouse.get_pos()
-            if (self.screen_width // 2 - 100 <= mouse_pos[0] <= self.screen_width // 2 + 100 and 
-                self.screen_height // 2 + 50 <= mouse_pos[1] <= self.screen_height // 2 + 100):
+            if (self.screen_width // 2 - 80 <= mouse_pos[0] <= self.screen_width // 2 + 80 and 
+                self.screen_height // 2 + 30 <= mouse_pos[1] <= self.screen_height // 2 + 70):
                 self.reset_game()
                 
     def reset_game(self):
         """重置游戏到初始状态"""
         # 清除所有物理对象
         self.space = pymunk.Space()
-        self.space.gravity = (0, 50)  # 极小的重力
-        self.space.damping = 0.95  # 非常高的阻尼
+        self.space.gravity = (0, 50)  # 重力
+        self.space.damping = 0.95  # 阻尼
         
         # 重新创建地面
         self.create_ground()
@@ -589,141 +585,109 @@ class GameManager:
 
     def start_dragging(self, x, y):
         """开始拖动一个新棋子"""
-        print("=== 开始创建新棋子 ===")
+        # 创建一个新棋子用于拖动
+        self.drag_piece = ChessPiece(x, y, self.space, self.selected_chess_type)
         
-        # 确保位置在有效范围内
-        if x < 50:
-            x = 50
-        elif x > self.screen_width - 50:
-            x = self.screen_width - 50
-            
-        if y < 100:
-            y = 100
-        elif y > self.screen_height - 100:
-            y = self.screen_height - 100
-        
-        # 创建新棋子，但不立即添加到物理空间
-        radius = 20  # 基础半径
-        chess_type = self.selected_chess_type
-        print(f"正在创建类型为 {chess_type.name} 的棋子在位置 ({x}, {y})")
-        
-        # 确保物理空间存在
-        if not hasattr(self, 'space') or self.space is None:
-            self.space = pymunk.Space()
-            self.space.gravity = (0, 300)
-            self.space.damping = 0.85
-            print("警告：物理空间不存在，已重新创建")
-            
-        # 临时创建棋子，但不添加到物理空间
-        piece = ChessPiece(x, y, chess_type, self.space, radius=radius, auto_add_to_space=False)
-        
-        # 手动添加棋子物理对象到空间
-        try:
-            piece.body.body_type = pymunk.Body.KINEMATIC
-            piece.body.velocity = (0, 0)
-            
-            # 确保棋子没有之前添加过
-            try:
-                piece.remove_from_space()
-            except:
-                pass
-                
-            self.space.add(piece.body, piece.shape)
-            print(f"棋子物理对象已添加到空间，当前body类型: {piece.body.body_type}")
-        except Exception as e:
-            print(f"添加棋子到物理空间失败: {e}")
+        # 设置拖动偏移
+        self.drag_offset = (0, 0)
         
         # 设置拖动状态
         self.dragging = True
-        self.drag_piece = piece
         
-        # 设置偏移量为0（鼠标点正好在棋子中心）
-        self.drag_offset = (0, 0)
-        
-        print(f"棋子创建成功，类型: {chess_type.name}, 位置: ({x}, {y})")
+        print(f"开始拖动棋子，初始位置: ({x}, {y}), 类型: {self.selected_chess_type.name}")
         
     def stop_dragging(self):
-        """停止拖动并放置棋子"""
-        if not self.dragging or self.drag_piece is None:
-            print("警告：试图停止拖动，但没有正在拖动的棋子")
+        """结束棋子拖动操作，放置当前拖动中的棋子"""
+        print("尝试放置棋子...")
+        
+        if not self.dragging or not self.drag_piece:
+            print("警告：尝试停止已经不存在的拖动操作")
+            self.dragging = False
+            self.drag_piece = None
             return
             
-        print("=== 停止拖动并放置棋子 ===")
+        # 获取拖放位置
+        mouse_pos = pygame.mouse.get_pos()
         
-        try:
-            # 确保棋子在有效位置（不低于地面）
-            y_pos = self.drag_piece.body.position.y
-            if y_pos > self.screen_height - 70:  # 如果太靠近地面
-                y_pos = self.screen_height - 100  # 向上调整一点
-                self.drag_piece.body.position = (self.drag_piece.body.position.x, y_pos)
-                
-            # 确保棋子不在空中悬浮太高
-            if y_pos < 100:
-                y_pos = 100
-                self.drag_piece.body.position = (self.drag_piece.body.position.x, y_pos)
-            
-            # 确保不会超出左右边界
-            x_pos = self.drag_piece.body.position.x
-            if x_pos < 50:
-                x_pos = 50
-            elif x_pos > self.screen_width - 50:
-                x_pos = self.screen_width - 50
-                
-            self.drag_piece.body.position = (x_pos, y_pos)
-            print(f"棋子位置已调整至 ({x_pos}, {y_pos})")
-            
-            # 获取当前玩家模型
-            current_model = self.player1_model if self.current_state == GameState.BUILDING_MODEL_P1 else self.player2_model
-            
-            # 核心改变：创建一个全新的静态棋子替代当前拖动棋子
-            # 这样可以确保棋子不会受物理影响而消失
-            new_piece = ChessPiece(
-                x_pos, y_pos, 
-                self.drag_piece.chess_type,
-                self.space,
-                radius=20,
-                mass=20.0,  # 使用更大的质量
-                auto_add_to_space=False
-            )
-            
-            # 复制旋转角度
-            new_piece.body.angle = self.drag_piece.body.angle
-            
-            # 先移除旧棋子
-            try:
-                self.space.remove(self.drag_piece.body, self.drag_piece.shape)
-                print("移除拖动棋子成功")
-            except Exception as e:
-                print(f"移除拖动棋子失败: {e}")
-            
-            # 添加新棋子到物理空间
-            new_piece.body.velocity = (0, -10)  # 小的向上速度
-            new_piece.body.angular_velocity = 0  # 无旋转
-            
-            try:
-                self.space.add(new_piece.body, new_piece.shape)
-                print("新棋子已添加到物理空间")
-                
-                # 将新棋子设为动态
-                new_piece.body.body_type = pymunk.Body.DYNAMIC
-                
-                # 添加到模型中
-                current_model.add_piece(new_piece)
-                print(f"新棋子已添加到模型，当前模型棋子数: {len(current_model.pieces)}")
-                
-                # 打印新棋子信息
-                print(f"新棋子已放置在 ({int(x_pos)}, {int(y_pos)}), 类型: {new_piece.shape_type}")
-            except Exception as e:
-                print(f"添加新棋子到物理空间或模型失败: {e}")
-            
-        except Exception as e:
-            print(f"放置棋子过程中出错: {e}")
-            
+        # 检查是否位于游戏区域内
+        if mouse_pos[1] >= self.screen_height - 50:
+            # 如果拖到了底部区域，放弃放置该棋子
+            print("棋子拖放到底部区域外，放弃放置")
+            if self.drag_piece in self.space.bodies:
+                print("从物理空间移除临时棋子")
+                if self.drag_piece.shape in self.space.shapes:
+                    self.space.remove(self.drag_piece.shape)
+                self.space.remove(self.drag_piece)
+            self.dragging = False
+            self.drag_piece = None
+            return
+        
+        print(f"拖放完成，位置: {mouse_pos}")
+        
+        # 获取当前玩家模型
+        current_model = self.player1_model if self.current_player == 1 else self.player2_model
+        
+        # 核心改变：创建一个全新的静态棋子替代当前拖动棋子
+        x, y = mouse_pos
+        new_piece = ChessPiece(x, y, self.space, self.selected_chess_type)
+        new_piece.body.position = (x, y)
+        
+        # 为棋子设置物理属性
+        new_piece.body.velocity = (0, 0)  # 确保初始速度为零
+        print(f"棋子初始位置: {new_piece.body.position}, 初始速度: {new_piece.body.velocity}")
+        
+        # 把棋子添加到当前玩家的模型中
+        current_model.add_piece(new_piece)
+        print(f"添加棋子到玩家{self.current_player}模型，当前模型棋子数: {len(current_model.pieces)}")
+        
+        # 如果拖动中的临时棋子还在物理空间中，移除它
+        if self.drag_piece and self.drag_piece in self.space.bodies:
+            if hasattr(self.drag_piece, 'shape') and self.drag_piece.shape in self.space.shapes:
+                self.space.remove(self.drag_piece.shape)
+            self.space.remove(self.drag_piece)
+            print("移除临时拖动棋子")
+        
         # 重置拖动状态
         self.dragging = False
         self.drag_piece = None
-        self.drag_offset = (0, 0)
         
         # 最终验证
-        current_model = self.player1_model if self.current_state == GameState.BUILDING_MODEL_P1 else self.player2_model
-        print(f"拖放完成后当前模型棋子数: {len(current_model.pieces)}") 
+        current_model = self.player1_model if self.current_player == 1 else self.player2_model
+        print(f"拖放完成后当前模型棋子数: {len(current_model.pieces)}")
+
+    def draw_rules(self, screen):
+        """绘制游戏规则页面"""
+        screen.fill((50, 50, 50))  # 深灰色背景
+        
+        # 标题
+        title = self.font.render("游戏规则", True, (255, 255, 255))
+        screen.blit(title, (self.screen_width // 2 - title.get_width() // 2, 30))
+        
+        # 规则内容
+        rules = [
+            "1. 游戏分为建造和战斗两个阶段",
+            "2. 建造阶段：玩家轮流放置棋子，建造自己的堡垒",
+            "3. 每个玩家最多可以放置12个棋子",
+            "4. 棋子种类：兵(圆形)、车(方形)、马(三角形)",
+            "5. 战斗阶段：玩家通过调整发射力度攻击对方堡垒",
+            "6. 当任一方堡垒的棋子全部被击落，游戏结束",
+            "7. 剩余棋子较多的玩家获胜"
+        ]
+        
+        y_pos = 80
+        for rule in rules:
+            rule_text = self.small_font.render(rule, True, (255, 255, 255))
+            screen.blit(rule_text, (self.screen_width // 2 - 150, y_pos))
+            y_pos += 30
+        
+        # 返回按钮
+        pygame.draw.rect(screen, (100, 100, 255), (self.screen_width // 2 - 60, 350, 120, 40))
+        back_text = self.small_font.render("返回", True, (255, 255, 255))
+        screen.blit(back_text, (self.screen_width // 2 - back_text.get_width() // 2, 358))
+        
+        # 检测鼠标点击
+        if pygame.mouse.get_pressed()[0]:
+            mouse_pos = pygame.mouse.get_pos()
+            if (self.screen_width // 2 - 60 <= mouse_pos[0] <= self.screen_width // 2 + 60 and 
+                350 <= mouse_pos[1] <= 390):
+                self.current_state = GameState.MAIN_MENU 
