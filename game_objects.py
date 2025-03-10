@@ -83,15 +83,22 @@ class ChessModel:
         
     def is_destroyed(self):
         """检查模型是否被完全摧毁（所有棋子都散落在地面以上一定高度）"""
-        # 这里简化处理，实际应用中可以更加复杂
-        intact_count = 0
+        if not self.pieces:  # 如果没有棋子，认为模型已摧毁
+            return True
+            
+        # 计算初始完好的棋子数量
+        ground_y = 500  # 假设500是地面位置
+        initial_total = len(self.pieces)
+        fallen_count = 0
+        
         for piece in self.pieces:
-            # 检查棋子是否仍在正常位置（不在地面上）
-            if piece.body.position.y < 500:  # 假设500是地面位置
-                intact_count += 1
+            # 检查棋子是否已掉落或靠近地面
+            if piece.body.position.y > ground_y - 50:
+                fallen_count += 1
                 
-        # 如果大部分棋子已散落，则认为模型已被摧毁
-        return intact_count < len(self.pieces) * 0.3
+        # 如果超过70%的棋子已散落，则认为模型已被摧毁
+        destruction_percent = fallen_count / initial_total
+        return destruction_percent > 0.7
     
     def save(self, filename):
         """保存模型状态"""
@@ -100,23 +107,42 @@ class ChessModel:
             'pieces': [(p.body.position.x, p.body.position.y, p.chess_type.value) for p in self.pieces]
         }
         
-        with open(f"{filename}.model", "wb") as f:
-            pickle.dump(model_data, f)
+        try:
+            with open(f"{filename}.model", "wb") as f:
+                pickle.dump(model_data, f)
+            print(f"模型已保存到 {filename}.model 文件，包含 {len(self.pieces)} 个棋子")
+            return True
+        except Exception as e:
+            print(f"保存模型失败: {e}")
+            return False
             
     @classmethod
     def load(cls, filename, space):
         """加载模型状态"""
-        if not os.path.exists(f"{filename}.model"):
-            return None
+        try:
+            if not os.path.exists(f"{filename}.model"):
+                print(f"无法找到模型文件: {filename}.model")
+                return None
+                
+            with open(f"{filename}.model", "rb") as f:
+                model_data = pickle.load(f)
+                
+            model = ChessModel(model_data['player_id'])
             
-        with open(f"{filename}.model", "rb") as f:
-            model_data = pickle.load(f)
-            
-        model = ChessModel(model_data['player_id'])
-        
-        for x, y, chess_type_value in model_data['pieces']:
-            chess_type = ChessPieceType(chess_type_value)
-            piece = ChessPiece(x, y, chess_type, space)
-            model.add_piece(piece)
-            
-        return model 
+            if 'pieces' in model_data and len(model_data['pieces']) > 0:
+                for x, y, chess_type_value in model_data['pieces']:
+                    try:
+                        chess_type = ChessPieceType(chess_type_value)
+                        piece = ChessPiece(x, y, chess_type, space)
+                        model.add_piece(piece)
+                    except Exception as e:
+                        print(f"加载棋子失败: {e}")
+                
+                print(f"从 {filename}.model 成功加载了 {len(model.pieces)} 个棋子")
+                return model
+            else:
+                print(f"模型文件 {filename}.model 没有包含棋子数据")
+                return None
+        except Exception as e:
+            print(f"加载模型失败: {e}")
+            return None 

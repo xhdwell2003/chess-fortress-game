@@ -1,6 +1,6 @@
 import pygame
 import sys
-from game_states import GameManager
+from game_states import GameManager, GameState
 
 def main():
     # 初始化pygame
@@ -18,8 +18,17 @@ def main():
     # 设置游戏时钟
     clock = pygame.time.Clock()
     
+    # 记录前一个游戏状态以检测状态变化
+    previous_state = game_manager.current_state
+    print(f"游戏启动，初始状态: {previous_state}")
+    
     # 游戏主循环
     while True:
+        # 检测状态变化
+        if game_manager.current_state != previous_state:
+            print(f"游戏状态从 {previous_state} 变为 {game_manager.current_state}")
+            previous_state = game_manager.current_state
+            
         # 处理事件
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
