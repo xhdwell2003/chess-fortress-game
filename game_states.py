@@ -22,7 +22,8 @@ class GameManager:
         
         # 初始化物理空间
         self.space = pymunk.Space()
-        self.space.gravity = (0, 900)  # 设置重力
+        self.space.gravity = (0, 300)  # 大幅降低重力强度
+        self.space.damping = 0.85  # 增加阻尼，减少过度振动
         
         # 创建地面
         self.create_ground()
@@ -68,28 +69,32 @@ class GameManager:
         ground_body = pymunk.Body(body_type=pymunk.Body.STATIC)
         ground_shape = pymunk.Segment(ground_body, (0, self.screen_height - 50), 
                                       (self.screen_width, self.screen_height - 50), 5)
-        ground_shape.friction = 0.9
-        ground_shape.elasticity = 0.5
+        ground_shape.friction = 0.9  # 增加摩擦力，使棋子更稳定
+        ground_shape.elasticity = 0.2  # 降低弹性，减少弹跳
         self.space.add(ground_body, ground_shape)
         
         # 左边界
         left_body = pymunk.Body(body_type=pymunk.Body.STATIC)
         left_shape = pymunk.Segment(left_body, (0, 0), (0, self.screen_height), 5)
-        left_shape.friction = 0.5
-        left_shape.elasticity = 0.5
+        left_shape.friction = 0.8
+        left_shape.elasticity = 0.2
         self.space.add(left_body, left_shape)
         
         # 右边界
         right_body = pymunk.Body(body_type=pymunk.Body.STATIC)
         right_shape = pymunk.Segment(right_body, (self.screen_width, 0), 
                                     (self.screen_width, self.screen_height), 5)
-        right_shape.friction = 0.5
-        right_shape.elasticity = 0.5
+        right_shape.friction = 0.8
+        right_shape.elasticity = 0.2
         self.space.add(right_body, right_shape)
         
     def update(self, dt):
         """更新游戏状态"""
-        self.space.step(dt)
+        # 使用固定的物理步长，避免物理模拟中的不稳定性
+        step_dt = 1/120.0  # 固定步长为120FPS
+        steps = int(dt / step_dt) + 1
+        for _ in range(steps):
+            self.space.step(step_dt)
         
         # 在战斗状态下检查胜负
         if self.current_state == GameState.BATTLE:
@@ -310,6 +315,10 @@ class GameManager:
         if self.dragging:
             rotate_hint = self.font.render("使用左右方向键旋转棋子", True, (255, 0, 0))
             screen.blit(rotate_hint, (20, 180))
+            
+            # 显示当前拖放位置
+            pos_text = self.font.render(f"位置: ({int(self.drag_piece.body.position.x)}, {int(self.drag_piece.body.position.y)})", True, (255, 0, 0))
+            screen.blit(pos_text, (20, 210))
         
         # 绘制保存提示
         save_hint = self.font.render("按 S 键保存模型并继续", True, (0, 0, 255))
@@ -322,13 +331,20 @@ class GameManager:
             screen.blit(battle_text, (self.screen_width - 150 + (130 - battle_text.get_width()) // 2, 
                                    100 + (40 - battle_text.get_height()) // 2))
         
-        # 绘制已添加的棋子
+        # 先绘制已添加的棋子
         current_model = self.player1_model if player_name == "玩家1" else self.player2_model
         for piece in current_model.pieces:
             piece.draw(screen, self.draw_options)
             
-        # 绘制正在拖动的棋子
+        # 最后绘制正在拖动的棋子，确保它在最上层
         if self.dragging and self.drag_piece:
+            # 绘制半透明指示线至地面
+            ground_y = self.screen_height - 50
+            pos_x = int(self.drag_piece.body.position.x)
+            pos_y = int(self.drag_piece.body.position.y)
+            pygame.draw.line(screen, (200, 200, 200, 128), (pos_x, pos_y), (pos_x, ground_y), 1)
+            
+            # 绘制棋子
             self.drag_piece.draw(screen, self.draw_options)
             
     def draw_battle_phase(self, screen):
@@ -416,7 +432,8 @@ class GameManager:
         """重置游戏到初始状态"""
         # 清除所有物理对象
         self.space = pymunk.Space()
-        self.space.gravity = (0, 900)
+        self.space.gravity = (0, 300)  # 大幅降低重力强度
+        self.space.damping = 0.85  # 增加阻尼
         
         # 重新创建地面
         self.create_ground()
@@ -428,7 +445,14 @@ class GameManager:
         # 重置游戏状态
         self.current_state = GameState.MAIN_MENU
         self.active_player = 1
-        self.projectile = None 
+        self.projectile = None
+        
+        # 重置拖放状态
+        self.dragging = False
+        self.drag_piece = None
+        self.drag_offset = (0, 0)
+        
+        print("游戏重置，返回主菜单")
 
     def prepare_battle_phase(self):
         """准备战斗阶段，重新定位棋子模型并添加引导提示"""
@@ -460,9 +484,25 @@ class GameManager:
 
     def start_dragging(self, x, y):
         """开始拖动一个新棋子"""
-        # 创建新棋子
+        # 确保位置在有效范围内
+        if x < 50:
+            x = 50
+        elif x > self.screen_width - 50:
+            x = self.screen_width - 50
+            
+        if y < 100:
+            y = 100
+        elif y > self.screen_height - 100:
+            y = self.screen_height - 100
+        
+        # 创建新棋子，但不立即添加到物理空间
         radius = 20  # 基础半径
-        piece = ChessPiece(x, y, self.selected_chess_type, self.space, radius=radius)
+        piece = ChessPiece(x, y, self.selected_chess_type, self.space, radius=radius, auto_add_to_space=False)
+        
+        # 手动添加棋子的body到物理空间，但先设为KINEMATIC
+        piece.body.body_type = pymunk.Body.KINEMATIC
+        piece.body.velocity = (0, 0)
+        self.space.add(piece.body, piece.shape)
         
         # 设置拖动状态
         self.dragging = True
@@ -471,17 +511,42 @@ class GameManager:
         # 设置偏移量为0（鼠标点正好在棋子中心）
         self.drag_offset = (0, 0)
         
-        # 临时关闭重力，使棋子可以自由移动
-        self.drag_piece.body.body_type = pymunk.Body.KINEMATIC
-        
     def stop_dragging(self):
         """停止拖动并放置棋子"""
         if self.drag_piece:
-            # 重新启用物理特性
-            self.drag_piece.body.body_type = pymunk.Body.DYNAMIC
+            # 确保棋子在有效位置（不低于地面）
+            y_pos = self.drag_piece.body.position.y
+            if y_pos > self.screen_height - 70:  # 如果太靠近地面
+                y_pos = self.screen_height - 100  # 向上调整一点
+                self.drag_piece.body.position = (self.drag_piece.body.position.x, y_pos)
+                
+            # 确保棋子不在空中悬浮太高
+            if y_pos < 100:
+                y_pos = 100
+                self.drag_piece.body.position = (self.drag_piece.body.position.x, y_pos)
+            
+            # 确保不会超出左右边界
+            x_pos = self.drag_piece.body.position.x
+            if x_pos < 50:
+                x_pos = 50
+            elif x_pos > self.screen_width - 50:
+                x_pos = self.screen_width - 50
+                
+            self.drag_piece.body.position = (x_pos, y_pos)
             
             # 添加到当前玩家的模型中
             current_model = self.player1_model if self.current_state == GameState.BUILDING_MODEL_P1 else self.player2_model
+            
+            # 设置一个小的初始向上速度，防止立即下落
+            self.drag_piece.body.velocity = (0, -10)
+            
+            # 确保棋子已经静止
+            self.drag_piece.body.angular_velocity = 0
+            
+            # 重新启用物理特性
+            self.drag_piece.body.body_type = pymunk.Body.DYNAMIC
+            
+            # 确保我们保留对这个棋子的引用
             current_model.add_piece(self.drag_piece)
             
             print(f"棋子已放置在 ({int(self.drag_piece.body.position.x)}, {int(self.drag_piece.body.position.y)})")

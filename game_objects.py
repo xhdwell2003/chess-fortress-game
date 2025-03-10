@@ -14,10 +14,11 @@ class ChessPieceType(Enum):
 
 # 棋子基类
 class ChessPiece:
-    def __init__(self, x, y, chess_type, space, radius=20, mass=1.0):
+    def __init__(self, x, y, chess_type, space, radius=20, mass=1.0, auto_add_to_space=True):
         self.chess_type = chess_type
         self.shape_type = None  # 形状类型：'circle', 'rect', 'square'
         self.color = None
+        self.space = space  # 保存对物理空间的引用
         
         # 设置不同类型棋子的形状、颜色和物理属性
         if chess_type == ChessPieceType.MILITARY_CHESS:
@@ -58,64 +59,110 @@ class ChessPiece:
             self.radius = radius * 0.8
             self.shape_type = 'circle'
             
-        space.add(self.body, self.shape)
+        # 只有在auto_add_to_space为True时才添加到物理空间
+        if auto_add_to_space:
+            space.add(self.body, self.shape)
+        
+    def add_to_space(self):
+        """显式地将棋子添加到物理空间"""
+        if self.space:
+            self.space.add(self.body, self.shape)
+    
+    def remove_from_space(self):
+        """从物理空间中移除棋子"""
+        if self.space:
+            self.space.remove(self.body, self.shape)
         
     def draw(self, screen, draw_options):
         # 根据形状类型绘制棋子
-        if self.shape_type == 'circle':
-            # 绘制圆形棋子(围棋)
-            try:
-                pygame.draw.circle(screen, self.color, 
-                                 (int(self.body.position.x), int(self.body.position.y)), 
-                                 int(self.radius))
-                
-                # 绘制棋子边缘
-                pygame.draw.circle(screen, (50, 50, 50), 
-                                 (int(self.body.position.x), int(self.body.position.y)), 
-                                 int(self.radius), 2)
-            except (ValueError, TypeError):
-                # 忽略无效的坐标值
-                pass
-        
-        elif self.shape_type == 'rect':
-            # 绘制长方形棋子(军棋)
-            try:
-                # 计算四个角的坐标，考虑旋转角度
-                vertices = self.shape.get_vertices()
-                points = []
-                for v in vertices:
-                    # 从局部坐标转换为全局坐标
-                    point = v.rotated(self.body.angle) + self.body.position
-                    if math.isnan(point.x) or math.isnan(point.y):
-                        # 跳过无效坐标
-                        return
-                    points.append((int(point.x), int(point.y)))
+        try:
+            if self.shape_type == 'circle':
+                # 绘制圆形棋子(围棋)
+                try:
+                    pygame.draw.circle(screen, self.color, 
+                                     (int(self.body.position.x), int(self.body.position.y)), 
+                                     int(self.radius))
                     
-                # 绘制填充多边形和边框
-                pygame.draw.polygon(screen, self.color, points)
-                pygame.draw.polygon(screen, (50, 50, 50), points, 2)
-            except (ValueError, TypeError):
-                # 忽略无效的坐标值
-                pass
+                    # 绘制棋子边缘
+                    pygame.draw.circle(screen, (50, 50, 50), 
+                                     (int(self.body.position.x), int(self.body.position.y)), 
+                                     int(self.radius), 2)
+                except (ValueError, TypeError):
+                    # 忽略无效的坐标值
+                    pass
             
-        elif self.shape_type == 'square':
-            # 绘制正方形棋子(象棋)
-            try:
-                vertices = self.shape.get_vertices()
-                points = []
-                for v in vertices:
-                    point = v.rotated(self.body.angle) + self.body.position
-                    if math.isnan(point.x) or math.isnan(point.y):
-                        # 跳过无效坐标
-                        return
-                    points.append((int(point.x), int(point.y)))
+            elif self.shape_type == 'rect':
+                # 绘制长方形棋子(军棋)
+                try:
+                    # 计算四个角的坐标，考虑旋转角度
+                    vertices = self.shape.get_vertices()
+                    points = []
+                    valid_points = True
                     
-                # 绘制填充多边形和边框
-                pygame.draw.polygon(screen, self.color, points)
-                pygame.draw.polygon(screen, (50, 50, 50), points, 2)
-            except (ValueError, TypeError):
-                # 忽略无效的坐标值
-                pass
+                    for v in vertices:
+                        # 从局部坐标转换为全局坐标
+                        point = v.rotated(self.body.angle) + self.body.position
+                        if math.isnan(point.x) or math.isnan(point.y):
+                            # 跳过无效坐标
+                            valid_points = False
+                            break
+                        points.append((int(point.x), int(point.y)))
+                        
+                    # 绘制填充多边形和边框
+                    if valid_points and len(points) >= 3:
+                        pygame.draw.polygon(screen, self.color, points)
+                        pygame.draw.polygon(screen, (50, 50, 50), points, 2)
+                    else:
+                        # 如果点无效，退回到简单的矩形绘制
+                        x, y = int(self.body.position.x), int(self.body.position.y)
+                        pygame.draw.rect(screen, self.color, (x - int(self.width/2), y - int(self.height/2), 
+                                                          int(self.width), int(self.height)))
+                except (ValueError, TypeError, AttributeError):
+                    # 忽略无效的坐标值
+                    try:
+                        # 退回到简单矩形
+                        x, y = int(self.body.position.x), int(self.body.position.y)
+                        pygame.draw.rect(screen, self.color, (x - int(self.width/2), y - int(self.height/2), 
+                                                          int(self.width), int(self.height)))
+                    except:
+                        pass
+                
+            elif self.shape_type == 'square':
+                # 绘制正方形棋子(象棋)
+                try:
+                    vertices = self.shape.get_vertices()
+                    points = []
+                    valid_points = True
+                    
+                    for v in vertices:
+                        point = v.rotated(self.body.angle) + self.body.position
+                        if math.isnan(point.x) or math.isnan(point.y):
+                            # 跳过无效坐标
+                            valid_points = False
+                            break
+                        points.append((int(point.x), int(point.y)))
+                        
+                    # 绘制填充多边形和边框
+                    if valid_points and len(points) >= 3:
+                        pygame.draw.polygon(screen, self.color, points)
+                        pygame.draw.polygon(screen, (50, 50, 50), points, 2)
+                    else:
+                        # 如果点无效，退回到简单的矩形绘制
+                        x, y = int(self.body.position.x), int(self.body.position.y)
+                        pygame.draw.rect(screen, self.color, (x - int(self.size/2), y - int(self.size/2), 
+                                                          int(self.size), int(self.size)))
+                except (ValueError, TypeError, AttributeError):
+                    # 忽略无效的坐标值
+                    try:
+                        # 退回到简单矩形
+                        x, y = int(self.body.position.x), int(self.body.position.y)
+                        pygame.draw.rect(screen, self.color, (x - int(self.size/2), y - int(self.size/2), 
+                                                          int(self.size), int(self.size)))
+                    except:
+                        pass
+        except Exception as e:
+            # 捕获所有可能的绘制错误
+            print(f"绘制棋子时出错: {e}")
 
 # 弹射物（圆珠笔芯）
 class Projectile:
