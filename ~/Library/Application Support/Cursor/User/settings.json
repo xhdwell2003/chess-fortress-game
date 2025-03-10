@@ -1,0 +1,9 @@
+{
+    "window.commandCenter": 1,
+    "explorer.confirmPasteNative": false,
+    "python.createEnvironment.trigger": "off",
+    "workbench.activityBar.orientation": "vertical",
+    "git.autofetch": true,
+    "cursor.rules.path": "/Users/xiaohandong/cusors/棋子堡垒python版/.cursorrules",
+    "cursor.rules.enable": true
+} 

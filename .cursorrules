@@ -1,0 +1,144 @@
+# .cursorrules - 棋子堡垒Python版项目规范
+
+# 项目概述
+[project]
+name = "棋子堡垒Python版"
+description = "基于Python和Pygame的棋子堡垒对战游戏"
+version = "1.0.0"
+maintainers = ["xhdwell2003"]
+
+# 代码组织结构
+[structure]
+# 主要源代码文件
+source_files = [
+    "main.py",         # 游戏入口
+    "game_states.py",  # 游戏状态管理
+    "game_objects.py", # 游戏对象定义
+]
+
+# 资源文件目录
+assets = [
+    "assets/fonts/",   # 字体资源
+    "assets/images/",  # 图像资源
+    "assets/sounds/",  # 音效资源
+]
+
+# 临时或自动生成的文件，不应提交到版本控制
+ignored = [
+    "__pycache__/",
+    "*.pyc",
+    "*.pyo",
+    "*.pyd",
+    ".DS_Store",
+    "venv/",
+    "player*_model",   # 玩家模型保存文件
+]
+
+# 代码风格规范
+[style]
+# Python代码规范
+python = """
+- 遵循PEP 8规范
+- 使用4个空格进行缩进，不使用Tab
+- 行长度最大限制为100个字符
+- 类名使用CamelCase命名法
+- 函数和变量使用lowercase_with_underscores命名法
+- 常量使用UPPERCASE_WITH_UNDERSCORES命名法
+- 使用中文注释，使代码更易理解
+"""
+
+# Pygame特定规范
+pygame = """
+- 物理引擎参数应明确注释，解释其物理意义
+- 坐标系使用标准的屏幕坐标系(左上角为原点)
+- 所有硬编码的常量应定义为类常量或配置变量
+- 游戏状态转换应明确记录和注释
+"""
+
+# 注释规范
+[comments]
+class_docs = """
+每个类应有文档字符串，描述其功能和用途。例如:
+```python
+class ChessPiece:
+    \"\"\"棋子类，表示游戏中的基本棋子对象
+    
+    包含棋子的物理属性、绘制方法和碰撞检测逻辑
+    \"\"\"
+```
+"""
+
+function_docs = """
+关键函数应有文档字符串，描述其参数、返回值和功能。例如:
+```python
+def draw(self, screen):
+    \"\"\"绘制棋子到屏幕上
+    
+    Args:
+        screen: Pygame屏幕对象，用于绘制
+        
+    Returns:
+        None
+    \"\"\"
+```
+"""
+
+# 项目特定规则
+[game_rules]
+# 游戏状态枚举值应保持一致，避免混淆
+game_states = """
+- MAIN_MENU = 0
+- BUILDING_PHASE = 1
+- BATTLE = 3
+- GAME_OVER = 4
+- RULES = 5
+"""
+
+# 棋子类型枚举值应保持一致，避免混淆
+chess_types = """
+- MILITARY_CHESS = 1  # 军棋
+- CHINESE_CHESS = 2   # 中国象棋
+- GO_CHESS = 3        # 围棋
+"""
+
+# 游戏界面布局统一规范
+layout = """
+- 使用统一的字体大小:
+  * 主要文字: 18pt
+  * 小型标签文字: 14pt
+- 按钮尺寸统一: 160x40像素
+- 棋子标准半径: 20像素
+"""
+
+# 测试与调试规范
+[testing]
+debug_mode = """
+- 调试信息应使用print语句并包含明确的前缀
+- 发布版本应移除或禁用所有调试输出
+- 物理碰撞问题应通过调试绘制进行可视化
+"""
+
+error_handling = """
+- 所有外部依赖操作应使用try-except包装
+- 棋子物理操作应包含失败后的恢复机制
+- 用户输入验证应全面，防止程序崩溃
+"""
+
+# 版本控制规范
+[version_control]
+commit_message = """
+提交消息应遵循以下格式:
+- 修复: 修复了某个Bug
+- 新增: 添加了新功能
+- 优化: 改进了现有功能
+- 重构: 代码重构，不改变功能
+- 文档: 更新了文档
+- 资源: 更新了游戏资源
+"""
+
+branch_strategy = """
+- main: 主分支，保持稳定可运行状态
+- develop: 开发分支，新功能整合
+- feature/*: 功能分支，用于开发新功能
+- bugfix/*: 修复分支，用于修复特定问题
+""" 
