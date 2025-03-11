@@ -463,16 +463,12 @@ class GameManager:
         # 获取当前玩家的棋子计数
         current_chess_counts = self.player1_chess_counts if self.current_player == 1 else self.player2_chess_counts
         
-        # 如果是玩家2建造阶段，绘制玩家1的模型（静态显示）
+        # 如果是玩家2建造阶段，绘制玩家1的模型区域
         if self.current_player == 2 and hasattr(self, 'player1_model_saved') and self.player1_model_saved:
             # 绘制半透明背景，表示这是玩家1的模型区域
             overlay = pygame.Surface((self.screen_width // 2, self.screen_height), pygame.SRCALPHA)
             overlay.fill((200, 200, 200, 100))  # 半透明灰色背景
             screen.blit(overlay, (0, 0))
-            
-            # 绘制分隔线
-            pygame.draw.line(screen, (0, 0, 0), (self.screen_width // 2, 0), 
-                           (self.screen_width // 2, self.screen_height), 3)
             
             # 添加提示文字
             hint = self.font.render("玩家1的模型（已保存）", True, (0, 0, 0))
