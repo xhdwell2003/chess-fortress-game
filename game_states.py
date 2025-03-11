@@ -23,8 +23,8 @@ class GameManager:
         
         # 初始化物理空间
         self.space = pymunk.Space()
-        self.space.gravity = (0, 50)  # 重力
-        self.space.damping = 0.95  # 阻尼
+        self.space.gravity = (0, 200)  # 进一步增加重力
+        self.space.damping = 0.85  # 进一步减小阻尼，使物体运动更流畅
         
         # 创建地面
         self.create_ground()
@@ -535,8 +535,8 @@ class GameManager:
         """重置游戏到初始状态"""
         # 清除所有物理对象
         self.space = pymunk.Space()
-        self.space.gravity = (0, 50)  # 重力
-        self.space.damping = 0.95  # 阻尼
+        self.space.gravity = (0, 200)  # 进一步增加重力
+        self.space.damping = 0.85  # 进一步减小阻尼，使物体运动更流畅
         
         # 重新创建地面
         self.create_ground()
@@ -702,7 +702,10 @@ class GameManager:
                     adjusted_x, adjusted_y = x, y
                 
                 self.drag_piece.body.position = pymunk.Vec2d(adjusted_x, adjusted_y)
-                self.drag_piece.body.velocity = (0, 0)  # 重置速度
+                # 设置一个更大的初始向下速度，帮助棋子更快下落
+                self.drag_piece.body.velocity = (0, 5.0)
+                # 确保棋子处于动态状态
+                self.drag_piece.body.body_type = pymunk.Body.DYNAMIC
                 
                 print(f"已有棋子位置已更新: {self.drag_piece.body.position}")
                 
@@ -721,7 +724,10 @@ class GameManager:
                 new_piece = ChessPiece(x, y, self.space, self.selected_chess_type)
                 
                 # 确保棋子的物理属性正确设置
-                new_piece.body.velocity = (0, 0)  # 初始速度为零
+                # 设置一个更大的初始向下速度，帮助棋子更快下落
+                new_piece.body.velocity = (0, 5.0)
+                # 确保棋子处于动态状态
+                new_piece.body.body_type = pymunk.Body.DYNAMIC
                 
                 # 确保棋子位置有效（防止NaN值）
                 if math.isnan(new_piece.body.position.x) or math.isnan(new_piece.body.position.y):

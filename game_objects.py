@@ -14,7 +14,7 @@ class ChessPieceType(Enum):
 
 # 棋子基类
 class ChessPiece:
-    def __init__(self, x, y, space, chess_type, radius=20, mass=10.0):
+    def __init__(self, x, y, space, chess_type, radius=20, mass=20.0):
         self.chess_type = chess_type
         
         # 根据棋子类型创建不同形状和计算正确的惯性矩
@@ -51,9 +51,12 @@ class ChessPiece:
             self.shape_type = "triangle"
         
         # 设置物理属性
-        self.shape.elasticity = 0.5
-        self.shape.friction = 0.9
+        self.shape.elasticity = 0.2  # 进一步降低弹性，减少弹跳
+        self.shape.friction = 0.7  # 进一步降低摩擦力，使棋子能够更容易滑动
         self.radius = radius
+        
+        # 确保棋子是动态的，能够受重力影响
+        self.body.body_type = pymunk.Body.DYNAMIC
         
         # 添加到物理空间
         space.add(self.body, self.shape)
