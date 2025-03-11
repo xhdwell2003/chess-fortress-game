@@ -1,0 +1,23 @@
+---
+description: 版本控制规范
+globs: 
+alwaysApply: false
+---
+# 版本控制规范
+[version_control]
+commit_message = """
+提交消息应遵循以下格式:
+- 修复: 修复了某个Bug
+- 新增: 添加了新功能
+- 优化: 改进了现有功能
+- 重构: 代码重构，不改变功能
+- 文档: 更新了文档
+- 资源: 更新了游戏资源
+"""
+
+branch_strategy = """
+- main: 主分支，保持稳定可运行状态
+- develop: 开发分支，新功能整合
+- feature/*: 功能分支，用于开发新功能
+- bugfix/*: 修复分支，用于修复特定问题
+""" 

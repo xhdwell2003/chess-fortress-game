@@ -1,0 +1,25 @@
+---
+description: 代码风格规范
+globs: 
+alwaysApply: false
+---
+# 代码风格规范
+[style]
+# Python代码规范
+python = """
+- 遵循PEP 8规范
+- 使用4个空格进行缩进，不使用Tab
+- 行长度最大限制为100个字符
+- 类名使用CamelCase命名法
+- 函数和变量使用lowercase_with_underscores命名法
+- 常量使用UPPERCASE_WITH_UNDERSCORES命名法
+- 使用中文注释，使代码更易理解
+"""
+
+# Pygame特定规范
+pygame = """
+- 物理引擎参数应明确注释，解释其物理意义
+- 坐标系使用标准的屏幕坐标系(左上角为原点)
+- 所有硬编码的常量应定义为类常量或配置变量
+- 游戏状态转换应明确记录和注释
+"""

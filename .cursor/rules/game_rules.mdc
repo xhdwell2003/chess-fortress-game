@@ -1,0 +1,31 @@
+---
+description: 项目特定规则
+globs: 
+alwaysApply: false
+---
+# 项目特定规则
+[game_rules]
+# 游戏状态枚举值应保持一致，避免混淆
+game_states = """
+- MAIN_MENU = 0
+- BUILDING_PHASE = 1
+- BATTLE = 3
+- GAME_OVER = 4
+- RULES = 5
+"""
+
+# 棋子类型枚举值应保持一致，避免混淆
+chess_types = """
+- MILITARY_CHESS = 1  # 军棋
+- CHINESE_CHESS = 2   # 中国象棋
+- GO_CHESS = 3        # 围棋
+"""
+
+# 游戏界面布局统一规范
+layout = """
+- 使用统一的字体大小:
+  * 主要文字: 18pt
+  * 小型标签文字: 14pt
+- 按钮尺寸统一: 160x40像素
+- 棋子标准半径: 20像素
+"""

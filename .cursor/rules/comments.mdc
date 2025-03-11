@@ -1,0 +1,32 @@
+---
+description: 注释规范
+globs: 
+alwaysApply: false
+---
+# 注释规范
+[comments]
+class_docs = """
+每个类应有文档字符串，描述其功能和用途。例如:
+```python
+class ChessPiece:
+    \"\"\"棋子类，表示游戏中的基本棋子对象
+    
+    包含棋子的物理属性、绘制方法和碰撞检测逻辑
+    \"\"\"
+```
+"""
+
+function_docs = """
+关键函数应有文档字符串，描述其参数、返回值和功能。例如:
+```python
+def draw(self, screen):
+    \"\"\"绘制棋子到屏幕上
+    
+    Args:
+        screen: Pygame屏幕对象，用于绘制
+        
+    Returns:
+        None
+    \"\"\"
+```
+"""

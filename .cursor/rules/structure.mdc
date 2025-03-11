@@ -1,0 +1,31 @@
+---
+description: 代码组织结构
+globs: 
+alwaysApply: false
+---
+# 代码组织结构
+[structure]
+# 主要源代码文件
+source_files = [
+    "main.py",         # 游戏入口
+    "game_states.py",  # 游戏状态管理
+    "game_objects.py", # 游戏对象定义
+]
+
+# 资源文件目录
+assets = [
+    "assets/fonts/",   # 字体资源
+    "assets/images/",  # 图像资源
+    "assets/sounds/",  # 音效资源
+]
+
+# 临时或自动生成的文件，不应提交到版本控制
+ignored = [
+    "__pycache__/",
+    "*.pyc",
+    "*.pyo",
+    "*.pyd",
+    ".DS_Store",
+    "venv/",
+    "player*_model",   # 玩家模型保存文件
+]

@@ -1,0 +1,11 @@
+---
+description: 项目概述
+globs: 
+alwaysApply: false
+---
+# 项目概述
+[project]
+name = "棋子堡垒Python版"
+description = "基于Python和Pygame的棋子堡垒对战游戏"
+version = "1.0.0"
+maintainers = ["xhdwell2003"]

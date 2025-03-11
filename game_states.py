@@ -71,6 +71,29 @@ class GameManager:
         # 棋子选择
         self.selected_chess_type = ChessPieceType.MILITARY_CHESS
         
+        # 棋子数量限制
+        self.max_chess_counts = {
+            ChessPieceType.MILITARY_CHESS: 5,  # 军棋最大5个
+            ChessPieceType.CHINESE_CHESS: 1,   # 象棋最大1个
+            ChessPieceType.GO_CHESS: 3         # 围棋最大3个
+        }
+        # 当前玩家已放置的棋子数量
+        self.player1_chess_counts = {
+            ChessPieceType.MILITARY_CHESS: 0,
+            ChessPieceType.CHINESE_CHESS: 0,
+            ChessPieceType.GO_CHESS: 0
+        }
+        self.player2_chess_counts = {
+            ChessPieceType.MILITARY_CHESS: 0,
+            ChessPieceType.CHINESE_CHESS: 0,
+            ChessPieceType.GO_CHESS: 0
+        }
+        
+        # 提示信息
+        self.tip_message = ""
+        self.tip_timer = 0
+        self.tip_duration = 3000  # 提示显示时间（毫秒）
+        
         # 调试选项
         self.debug_draw = False  # 是否启用调试绘制
         
@@ -121,6 +144,10 @@ class GameManager:
                 self.current_state = GameState.GAME_OVER
                 self.winner = 1
                 
+        # 检查提示信息是否过期
+        if self.tip_message and pygame.time.get_ticks() - self.tip_timer >= self.tip_duration:
+            self.tip_message = ""
+        
     def keep_pieces_in_bounds(self):
         """确保所有棋子都在屏幕边界内"""
         # 定义边界
@@ -385,6 +412,9 @@ class GameManager:
         title = self.font.render(f"{player_name}建造阶段", True, (0, 0, 0))
         screen.blit(title, (self.screen_width // 2 - 80, 10))
         
+        # 获取当前玩家的棋子计数
+        current_chess_counts = self.player1_chess_counts if self.current_player == 1 else self.player2_chess_counts
+        
         # 绘制玩家可用的棋子类型
         chess_types = [
             ("军棋(1)", ChessPieceType.MILITARY_CHESS, (40, 40)),
@@ -409,9 +439,15 @@ class GameManager:
                 ]
                 pygame.draw.polygon(screen, (0, 0, 255), points)
                 
-            # 绘制名称
+            # 绘制名称和剩余数量
             text = self.small_font.render(name, True, (0, 0, 0))
             screen.blit(text, (pos[0]-20, pos[1]+20))
+            
+            # 显示剩余数量
+            remaining = self.max_chess_counts[chess_type] - current_chess_counts[chess_type]
+            count_text = self.small_font.render(f"剩余: {remaining}/{self.max_chess_counts[chess_type]}", True, 
+                                              (0, 0, 0) if remaining > 0 else (255, 0, 0))
+            screen.blit(count_text, (pos[0]-20, pos[1]+35))
             
         # 显示当前选择的棋子类型
         selected_text = self.small_font.render(f"当前选择: {self.selected_chess_type.name}", True, (0, 0, 0))
@@ -449,6 +485,18 @@ class GameManager:
         pieces_count = len(current_model.pieces)
         count_text = self.small_font.render(f"当前棋子数量: {pieces_count}", True, (0, 0, 0))
         screen.blit(count_text, (20, self.screen_height - 30))
+        
+        # 显示提示信息
+        if self.tip_message and pygame.time.get_ticks() - self.tip_timer < self.tip_duration:
+            # 创建半透明背景
+            tip_surface = pygame.Surface((self.screen_width, 40), pygame.SRCALPHA)
+            tip_surface.fill((0, 0, 0, 180))  # 黑色半透明背景
+            screen.blit(tip_surface, (0, self.screen_height // 2 - 20))
+            
+            # 显示提示文本
+            tip_text = self.font.render(self.tip_message, True, (255, 255, 255))
+            screen.blit(tip_text, (self.screen_width // 2 - tip_text.get_width() // 2, 
+                                  self.screen_height // 2 - tip_text.get_height() // 2))
         
     def draw_battle_phase(self, screen):
         """绘制战斗阶段"""
@@ -556,6 +604,18 @@ class GameManager:
         self.drag_offset = (0, 0)
         self.is_dragging_existing_piece = False
         
+        # 重置棋子计数
+        self.player1_chess_counts = {
+            ChessPieceType.MILITARY_CHESS: 0,
+            ChessPieceType.CHINESE_CHESS: 0,
+            ChessPieceType.GO_CHESS: 0
+        }
+        self.player2_chess_counts = {
+            ChessPieceType.MILITARY_CHESS: 0,
+            ChessPieceType.CHINESE_CHESS: 0,
+            ChessPieceType.GO_CHESS: 0
+        }
+        
         print("游戏重置，返回主菜单")
 
     def prepare_battle_phase(self):
@@ -590,6 +650,7 @@ class GameManager:
         """开始拖动一个棋子，如果点击在已有棋子上则移动该棋子，否则创建新棋子"""
         # 获取当前玩家模型
         current_model = self.player1_model if self.current_player == 1 else self.player2_model
+        current_chess_counts = self.player1_chess_counts if self.current_player == 1 else self.player2_chess_counts
         
         # 检查是否点击在已有棋子上
         clicked_piece = None
@@ -624,6 +685,9 @@ class GameManager:
             # 从模型中移除该棋子（暂时）
             current_model.pieces.remove(clicked_piece)
             
+            # 从计数中减去该棋子（暂时）
+            current_chess_counts[clicked_piece.chess_type] -= 1
+            
             # 设置为当前拖动的棋子
             self.drag_piece = clicked_piece
             
@@ -634,7 +698,20 @@ class GameManager:
             self.dragging = True
             self.is_dragging_existing_piece = True
         else:
-            # 如果点击在空白处，创建一个新棋子
+            # 如果点击在空白处，检查是否达到该类型棋子的数量限制
+            if current_chess_counts[self.selected_chess_type] >= self.max_chess_counts[self.selected_chess_type]:
+                print(f"{self.selected_chess_type.name}已达到最大数量限制({self.max_chess_counts[self.selected_chess_type]}个)")
+                # 设置提示信息
+                chess_type_names = {
+                    ChessPieceType.MILITARY_CHESS: "军棋",
+                    ChessPieceType.CHINESE_CHESS: "象棋",
+                    ChessPieceType.GO_CHESS: "围棋"
+                }
+                self.tip_message = f"{chess_type_names[self.selected_chess_type]}棋子已经达到上限。"
+                self.tip_timer = pygame.time.get_ticks()
+                return
+            
+            # 创建一个新棋子
             self.drag_piece = ChessPiece(x, y, self.space, self.selected_chess_type)
             
             # 设置拖动偏移
@@ -685,6 +762,7 @@ class GameManager:
         
         # 获取当前玩家模型
         current_model = self.player1_model if self.current_player == 1 else self.player2_model
+        current_chess_counts = self.player1_chess_counts if self.current_player == 1 else self.player2_chess_counts
         
         # 区分处理拖动已有棋子和放置新棋子的情况
         if hasattr(self, 'is_dragging_existing_piece') and self.is_dragging_existing_piece:
@@ -711,11 +789,16 @@ class GameManager:
                 
                 # 将棋子重新添加到模型中
                 current_model.add_piece(self.drag_piece)
+                # 更新棋子计数
+                current_chess_counts[self.drag_piece.chess_type] += 1
+                
                 print(f"已有棋子已重新添加到玩家{self.current_player}模型中")
             except Exception as e:
                 print(f"更新已有棋子位置时出错: {e}")
                 # 出错时也要将棋子重新添加到模型中
                 current_model.add_piece(self.drag_piece)
+                # 更新棋子计数
+                current_chess_counts[self.drag_piece.chess_type] += 1
         else:
             # 处理放置新棋子的情况
             try:
@@ -738,6 +821,9 @@ class GameManager:
                 
                 # 把棋子添加到当前玩家的模型中
                 current_model.add_piece(new_piece)
+                # 更新棋子计数
+                current_chess_counts[self.selected_chess_type] += 1
+                
                 print(f"添加新棋子到玩家{self.current_player}模型，当前模型棋子数: {len(current_model.pieces)}")
                 
                 # 移除拖动中的临时棋子
