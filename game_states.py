@@ -193,15 +193,15 @@ class GameManager:
                 if (hasattr(self.projectile.body, 'position') and 
                     (math.isnan(self.projectile.body.position.x) or 
                      math.isnan(self.projectile.body.position.y))):
-                    print("检测到弹射物位置为NaN，重置弹射物")
-                    self.projectile = None
-                    self.charging = False
+                    print("检测到弹射物位置为NaN，尝试修复")
+                    # 尝试修复位置而不是直接重置
+                    self.projectile.body.position = (self.screen_width / 2, self.screen_height / 2)
                 # 检查速度是否有效
                 elif (math.isnan(self.projectile.body.velocity.x) or 
                       math.isnan(self.projectile.body.velocity.y)):
-                    print("检测到弹射物速度为NaN，重置弹射物")
-                    self.projectile = None
-                    self.charging = False
+                    print("检测到弹射物速度为NaN，尝试修复")
+                    # 尝试修复速度而不是直接重置
+                    self.projectile.body.velocity = pymunk.Vec2d(0, 0)
                 # 如果弹射物速度很小，直接停止
                 else:
                     velocity_length = self.projectile.body.velocity.length
@@ -209,10 +209,8 @@ class GameManager:
                         self.projectile.body.velocity = pymunk.Vec2d(0, 0)
                         self.projectile.body.angular_velocity = 0
             except Exception as e:
-                # 如果处理弹射物速度时出错，打印错误并重置弹射物
+                # 如果处理弹射物速度时出错，打印错误但不重置弹射物
                 print(f"处理弹射物速度时出错: {e}")
-                self.projectile = None
-                self.charging = False
         
         # 在战斗状态下检查胜负
         if self.current_state == GameState.BATTLE:
@@ -297,9 +295,8 @@ class GameManager:
                     self.projectile.body.position = (x, bottom_bound)
                     self.projectile.body.velocity = (self.projectile.body.velocity.x, 0)
             except Exception as e:
-                # 如果处理弹射物边界时出错，打印错误并重置弹射物
+                # 如果处理弹射物边界时出错，打印错误但不重置弹射物
                 print(f"处理弹射物边界时出错: {e}")
-                self.projectile = None
         
     def handle_event(self, event):
         """处理游戏事件"""
@@ -404,25 +401,47 @@ class GameManager:
                     
                     # 计算发射方向
                     if self.projectile and hasattr(self.projectile, 'body') and hasattr(self.projectile.body, 'position'):
-                        dx = mouse_pos[0] - self.projectile.body.position.x
-                        dy = mouse_pos[1] - self.projectile.body.position.y
-                        angle = math.atan2(dy, dx)
-                        
-                        # 发射方向向量
-                        dir_x = math.cos(angle)
-                        dir_y = math.sin(angle)
-                        
-                        # 应用冲量发射弹射物
-                        strength = min(self.shoot_strength, self.max_strength)
-                        self.projectile.apply_impulse(pymunk.Vec2d(dir_x, dir_y), strength)
-                        
-                        # 切换玩家
-                        self.active_player = 2 if self.active_player == 1 else 1
+                        try:
+                            dx = mouse_pos[0] - self.projectile.body.position.x
+                            dy = mouse_pos[1] - self.projectile.body.position.y
+                            
+                            # 确保方向向量不为零
+                            if abs(dx) < 0.001 and abs(dy) < 0.001:
+                                dx = 1.0  # 默认向右发射
+                                dy = 0.0
+                                
+                            angle = math.atan2(dy, dx)
+                            
+                            # 发射方向向量
+                            dir_x = math.cos(angle)
+                            dir_y = math.sin(angle)
+                            
+                            # 应用冲量发射弹射物
+                            strength = min(self.shoot_strength, self.max_strength)
+                            if strength <= 0:
+                                strength = 500  # 确保有最小强度
+                                
+                            # 确保弹射物是动态的
+                            if self.projectile.body.body_type != pymunk.Body.DYNAMIC:
+                                self.projectile.body.body_type = pymunk.Body.DYNAMIC
+                                
+                            self.projectile.apply_impulse(pymunk.Vec2d(dir_x, dir_y), strength)
+                            print(f"发射弹射物，方向: ({dir_x:.2f}, {dir_y:.2f})，强度: {strength}")
+                            
+                            # 切换玩家
+                            self.active_player = 2 if self.active_player == 1 else 1
+                        except Exception as e:
+                            print(f"发射弹射物时出错: {e}")
+                            # 不重置弹射物，只打印错误
                     else:
-                        # 如果弹射物无效，重置状态
-                        self.projectile = None
-                        self.charging = False
-                        print("弹射物无效，已重置状态")
+                        # 如果弹射物无效，重置状态并创建新的
+                        print("弹射物无效，创建新的弹射物")
+                        # 获取鼠标位置
+                        x = max(30, min(mouse_pos[0], self.screen_width - 30))
+                        y = max(30, min(mouse_pos[1], self.screen_height - 100))
+                        
+                        # 创建新的铅笔弹射物
+                        self.projectile = Projectile(x, y, self.space)
         
         elif event.type == pygame.MOUSEMOTION:
             # 如果正在拖动棋子，更新棋子位置
@@ -754,9 +773,7 @@ class GameManager:
                                       mouse_pos, 2)
                 except Exception as e:
                     print(f"绘制方向指示线时出错: {e}")
-                    # 如果出现错误，重置弹射物
-                    self.projectile = None
-                    self.charging = False
+                    # 不重置弹射物，只打印错误
         
     def draw_game_over(self, screen):
         """绘制游戏结束界面"""

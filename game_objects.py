@@ -144,8 +144,8 @@ class Projectile:
         self.body = pymunk.Body(mass, moment)
         self.body.position = x, y
         
-        # 初始状态下设置为静态，防止乱跑
-        self.body.body_type = pymunk.Body.STATIC
+        # 初始状态下设置为动态，允许自由落体
+        self.body.body_type = pymunk.Body.DYNAMIC
         
         # 创建铅笔形状（长方形）
         self.shape = pymunk.Poly.create_box(self.body, (self.length, self.width))
@@ -171,8 +171,9 @@ class Projectile:
     def apply_impulse(self, direction, strength):
         """施加冲量以发射弹射物"""
         try:
-            # 在发射前将铅笔设置为动态，使其受重力影响
-            self.body.body_type = pymunk.Body.DYNAMIC
+            # 确保弹射物是动态的
+            if self.body.body_type != pymunk.Body.DYNAMIC:
+                self.body.body_type = pymunk.Body.DYNAMIC
             
             # 检查方向向量是否有效
             if math.isnan(direction.x) or math.isnan(direction.y):
@@ -198,6 +199,7 @@ class Projectile:
             
             # 施加冲量
             self.body.apply_impulse_at_local_point(direction * strength)
+            print(f"成功发射弹射物，方向: ({direction.x:.2f}, {direction.y:.2f})，强度: {strength}")
         except Exception as e:
             print(f"施加冲量时出错: {e}")
         
