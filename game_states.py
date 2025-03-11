@@ -256,16 +256,24 @@ class GameManager:
                             print(f"开始拖动{self.selected_chess_type.name}棋子")
                         
                 elif self.current_state == GameState.BATTLE:
-                    # 开始充能
-                    self.charging = True
-                    self.shoot_strength = 0
-                    print(f"玩家{self.active_player}开始充能")
-                    
-                    # 创建弹射物
-                    if self.active_player == 1:
-                        self.projectile = Projectile(150, self.screen_height - 150, self.space)
+                    # 检查是否已经有弹射物
+                    if not self.projectile:
+                        # 获取鼠标位置
+                        mouse_pos = pygame.mouse.get_pos()
+                        
+                        # 创建铅笔弹射物在鼠标点击位置
+                        self.projectile = Projectile(mouse_pos[0], mouse_pos[1], self.space)
+                        print(f"玩家{self.active_player}添加了铅笔弹射物")
+                        
+                        # 开始充能
+                        self.charging = True
+                        self.shoot_strength = 0
+                        print(f"玩家{self.active_player}开始充能")
                     else:
-                        self.projectile = Projectile(self.screen_width - 150, self.screen_height - 150, self.space)
+                        # 如果已经有弹射物，开始充能
+                        self.charging = True
+                        self.shoot_strength = 0
+                        print(f"玩家{self.active_player}开始充能")
                     
                 # 如果是游戏结束状态，检查是否点击了返回主菜单
                 elif self.current_state == GameState.GAME_OVER:
@@ -561,23 +569,24 @@ class GameManager:
                                   self.screen_height // 2 - tip_text.get_height() // 2))
         
     def draw_battle_phase(self, screen):
-        """绘制战斗阶段"""
-        # 绘制标题
-        title = self.font.render(f"玩家{self.active_player}的回合", True, (0, 0, 0))
+        """绘制战斗阶段界面"""
+        # 绘制战斗阶段标题
+        title = self.font.render(f"战斗阶段 - 玩家{self.active_player}回合", True, (0, 0, 0))
         screen.blit(title, (self.screen_width // 2 - title.get_width() // 2, 10))
         
-        # 绘制战斗指导信息
-        if not self.charging and not self.projectile:
-            guide_text1 = self.font.render("点击鼠标左键开始充能，松开发射笔芯攻击对方模型", True, (0, 0, 255))
+        # 添加提示文字
+        if not self.projectile:
+            hint = self.font.render("点击屏幕添加铅笔弹射物", True, (255, 0, 0))
+            screen.blit(hint, (self.screen_width // 2 - hint.get_width() // 2, 40))
+        elif not self.charging:
+            hint = self.font.render("点击铅笔开始充能", True, (255, 0, 0))
+            screen.blit(hint, (self.screen_width // 2 - hint.get_width() // 2, 40))
+        else:
+            guide_text1 = self.font.render("松开鼠标发射铅笔", True, (0, 0, 255))
             screen.blit(guide_text1, (self.screen_width // 2 - guide_text1.get_width() // 2, 40))
             
             guide_text2 = self.font.render("玩家轮流攻击，直到一方模型散架", True, (0, 0, 255))
             screen.blit(guide_text2, (self.screen_width // 2 - guide_text2.get_width() // 2, 60))
-            
-            # 绘制起始点提示
-            start_x = 150 if self.active_player == 1 else self.screen_width - 150
-            pygame.draw.circle(screen, (0, 255, 0), (int(start_x), int(self.screen_height - 150)), 15)
-            pygame.draw.circle(screen, (0, 0, 0), (int(start_x), int(self.screen_height - 150)), 15, 2)
         
         # 绘制两个玩家的模型
         for piece in self.player1_model.pieces:
@@ -588,7 +597,7 @@ class GameManager:
             
         # 绘制弹射物
         if self.projectile:
-            self.projectile.draw(screen, self.draw_options)
+            self.projectile.draw(screen)
             
         # 如果正在充能，绘制充能条
         if self.charging:

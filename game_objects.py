@@ -134,26 +134,92 @@ class ChessPiece:
         except Exception as e:
             print(f"绘制棋子时出错: {e}")
 
-# 弹射物（圆珠笔芯）
+# 弹射物（铅笔）
 class Projectile:
     def __init__(self, x, y, space, radius=5, mass=0.5):
-        self.body = pymunk.Body(mass, pymunk.moment_for_circle(mass, 0, radius))
+        # 创建一个长方形的物理体，模拟铅笔形状
+        self.length = 30  # 铅笔长度
+        self.width = 8    # 铅笔宽度
+        moment = pymunk.moment_for_box(mass, (self.length, self.width))
+        self.body = pymunk.Body(mass, moment)
         self.body.position = x, y
-        self.shape = pymunk.Circle(self.body, radius)
+        
+        # 创建铅笔形状（长方形）
+        self.shape = pymunk.Poly.create_box(self.body, (self.length, self.width))
         self.shape.elasticity = 0.95
         self.shape.friction = 0.2
-        self.color = (0, 0, 255)  # 蓝色
-        self.radius = radius
+        
+        # 铅笔颜色
+        self.pencil_color = (255, 215, 0)  # 金黄色铅笔
+        self.tip_color = (50, 50, 50)      # 深灰色笔尖
+        
+        # 添加到物理空间
         space.add(self.body, self.shape)
         
     def apply_impulse(self, direction, strength):
         """施加冲量以发射弹射物"""
+        # 设置铅笔的角度，使笔尖朝向发射方向
+        angle = math.atan2(direction.y, direction.x)
+        self.body.angle = angle
+        
+        # 施加冲量
         self.body.apply_impulse_at_local_point(direction * strength)
         
-    def draw(self, screen, draw_options):
-        pygame.draw.circle(screen, self.color, 
-                          (int(self.body.position.x), int(self.body.position.y)), 
-                          self.radius)
+    def draw(self, screen, draw_options=None):
+        """绘制铅笔形状的弹射物"""
+        if hasattr(self, 'body') and hasattr(self.body, 'position'):
+            # 检查位置是否有效
+            if math.isnan(self.body.position.x) or math.isnan(self.body.position.y):
+                return
+                
+            # 获取铅笔的位置和角度
+            x, y = int(self.body.position.x), int(self.body.position.y)
+            angle = self.body.angle
+            
+            # 计算铅笔的四个角点
+            half_length = self.length / 2
+            half_width = self.width / 2
+            
+            # 铅笔主体的四个角点（顺时针）
+            points = [
+                (-half_length, -half_width),
+                (half_length, -half_width),
+                (half_length, half_width),
+                (-half_length, half_width)
+            ]
+            
+            # 旋转并平移点
+            rotated_points = []
+            for px, py in points:
+                # 旋转
+                rx = px * math.cos(angle) - py * math.sin(angle)
+                ry = px * math.sin(angle) + py * math.cos(angle)
+                # 平移
+                rotated_points.append((x + rx, y + ry))
+            
+            # 绘制铅笔主体
+            pygame.draw.polygon(screen, self.pencil_color, rotated_points)
+            pygame.draw.polygon(screen, (0, 0, 0), rotated_points, 1)  # 黑色边框
+            
+            # 计算笔尖位置（铅笔前端的三角形）
+            tip_length = 10
+            tip_points = [
+                (half_length, 0),  # 笔尖
+                (half_length - tip_length, -half_width),  # 左下角
+                (half_length - tip_length, half_width)    # 右下角
+            ]
+            
+            # 旋转并平移笔尖点
+            rotated_tip_points = []
+            for px, py in tip_points:
+                # 旋转
+                rx = px * math.cos(angle) - py * math.sin(angle)
+                ry = px * math.sin(angle) + py * math.cos(angle)
+                # 平移
+                rotated_tip_points.append((x + rx, y + ry))
+            
+            # 绘制笔尖
+            pygame.draw.polygon(screen, self.tip_color, rotated_tip_points)
 
 # 模型/堡垒类
 class ChessModel:
