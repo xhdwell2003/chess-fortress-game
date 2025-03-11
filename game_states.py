@@ -26,12 +26,18 @@ class GameManager:
         self.space.gravity = (0, 200)  # 进一步增加重力
         self.space.damping = 0.85  # 进一步减小阻尼，使物体运动更流畅
         
+        # 定义碰撞类型
+        self.ground_collision_type = 0
+        self.projectile_collision_type = 4
+        
         # 创建地面
         self.create_ground()
         
         # 设置碰撞处理
         # 为围棋和地面设置特殊的碰撞处理
         self.space.add_collision_handler(3, 0).begin = self.go_chess_ground_collision_handler
+        # 为弹射物和地面设置碰撞处理
+        self.space.add_collision_handler(self.projectile_collision_type, self.ground_collision_type).begin = self.projectile_ground_collision_handler
         
         # 玩家模型
         self.player1_model = ChessModel(1)
@@ -109,7 +115,7 @@ class GameManager:
                                       (self.screen_width, self.screen_height - 50), 5)
         ground_shape.friction = 1.0  # 最大摩擦力，防止滑动
         ground_shape.elasticity = 0.1  # 很低的弹性，防止弹跳
-        ground_shape.collision_type = 0  # 地面碰撞类型
+        ground_shape.collision_type = self.ground_collision_type  # 地面碰撞类型
         self.space.add(ground_body, ground_shape)
         
         # 左边界
@@ -117,6 +123,7 @@ class GameManager:
         left_shape = pymunk.Segment(left_body, (0, 0), (0, self.screen_height), 5)
         left_shape.friction = 1.0
         left_shape.elasticity = 0.1
+        left_shape.collision_type = self.ground_collision_type
         self.space.add(left_body, left_shape)
         
         # 右边界
@@ -125,6 +132,7 @@ class GameManager:
                                     (self.screen_width, self.screen_height), 5)
         right_shape.friction = 1.0
         right_shape.elasticity = 0.1
+        right_shape.collision_type = self.ground_collision_type
         self.space.add(right_body, right_shape)
         
     def go_chess_ground_collision_handler(self, arbiter, space, data):
@@ -146,6 +154,27 @@ class GameManager:
         # 返回True表示允许碰撞继续处理
         return True
         
+    def projectile_ground_collision_handler(self, arbiter, space, data):
+        """弹射物与地面的碰撞处理函数"""
+        # 获取碰撞的弹射物
+        projectile_shape = arbiter.shapes[0]
+        ground_shape = arbiter.shapes[1]
+        
+        # 减小弹射物的速度，使其更快停下来
+        if hasattr(projectile_shape, 'body'):
+            # 获取弹射物的速度
+            vel = projectile_shape.body.velocity
+            # 减小速度
+            projectile_shape.body.velocity = pymunk.Vec2d(vel.x * 0.8, vel.y * 0.8)
+            
+            # 如果速度很小，直接停止
+            if vel.length < 10:
+                projectile_shape.body.velocity = pymunk.Vec2d(0, 0)
+                projectile_shape.body.angular_velocity = 0
+        
+        # 返回True表示允许碰撞继续处理
+        return True
+        
     def update(self, dt):
         """更新游戏状态"""
         # 使用固定的物理步长，避免物理模拟中的不稳定性
@@ -156,6 +185,34 @@ class GameManager:
         
         # 确保所有棋子都在屏幕内
         self.keep_pieces_in_bounds()
+        
+        # 处理弹射物的速度
+        if self.projectile and hasattr(self.projectile, 'body') and hasattr(self.projectile.body, 'velocity'):
+            try:
+                # 检查位置是否有效
+                if (hasattr(self.projectile.body, 'position') and 
+                    (math.isnan(self.projectile.body.position.x) or 
+                     math.isnan(self.projectile.body.position.y))):
+                    print("检测到弹射物位置为NaN，重置弹射物")
+                    self.projectile = None
+                    self.charging = False
+                # 检查速度是否有效
+                elif (math.isnan(self.projectile.body.velocity.x) or 
+                      math.isnan(self.projectile.body.velocity.y)):
+                    print("检测到弹射物速度为NaN，重置弹射物")
+                    self.projectile = None
+                    self.charging = False
+                # 如果弹射物速度很小，直接停止
+                else:
+                    velocity_length = self.projectile.body.velocity.length
+                    if velocity_length < 5 and self.projectile.body.body_type == pymunk.Body.DYNAMIC:
+                        self.projectile.body.velocity = pymunk.Vec2d(0, 0)
+                        self.projectile.body.angular_velocity = 0
+            except Exception as e:
+                # 如果处理弹射物速度时出错，打印错误并重置弹射物
+                print(f"处理弹射物速度时出错: {e}")
+                self.projectile = None
+                self.charging = False
         
         # 在战斗状态下检查胜负
         if self.current_state == GameState.BATTLE:
@@ -220,6 +277,30 @@ class GameManager:
                         piece.body.velocity = (0, 0)
                         piece.body.angular_velocity = 0
         
+        # 检查弹射物是否超出边界
+        if self.projectile and hasattr(self.projectile, 'body') and hasattr(self.projectile.body, 'position'):
+            try:
+                x, y = self.projectile.body.position
+                
+                # 如果弹射物超出边界，将其拉回边界内
+                if x < left_bound:
+                    self.projectile.body.position = (left_bound, y)
+                    self.projectile.body.velocity = (0, self.projectile.body.velocity.y)
+                elif x > right_bound:
+                    self.projectile.body.position = (right_bound, y)
+                    self.projectile.body.velocity = (0, self.projectile.body.velocity.y)
+                    
+                if y < top_bound:
+                    self.projectile.body.position = (x, top_bound)
+                    self.projectile.body.velocity = (self.projectile.body.velocity.x, 0)
+                elif y > bottom_bound:
+                    self.projectile.body.position = (x, bottom_bound)
+                    self.projectile.body.velocity = (self.projectile.body.velocity.x, 0)
+            except Exception as e:
+                # 如果处理弹射物边界时出错，打印错误并重置弹射物
+                print(f"处理弹射物边界时出错: {e}")
+                self.projectile = None
+        
     def handle_event(self, event):
         """处理游戏事件"""
         if event.type == pygame.MOUSEBUTTONDOWN:
@@ -261,8 +342,12 @@ class GameManager:
                         # 获取鼠标位置
                         mouse_pos = pygame.mouse.get_pos()
                         
+                        # 确保鼠标位置在屏幕范围内
+                        x = max(30, min(mouse_pos[0], self.screen_width - 30))
+                        y = max(30, min(mouse_pos[1], self.screen_height - 100))
+                        
                         # 创建铅笔弹射物在鼠标点击位置
-                        self.projectile = Projectile(mouse_pos[0], mouse_pos[1], self.space)
+                        self.projectile = Projectile(x, y, self.space)
                         print(f"玩家{self.active_player}添加了铅笔弹射物")
                         
                         # 开始充能
@@ -270,10 +355,34 @@ class GameManager:
                         self.shoot_strength = 0
                         print(f"玩家{self.active_player}开始充能")
                     else:
-                        # 如果已经有弹射物，开始充能
-                        self.charging = True
-                        self.shoot_strength = 0
-                        print(f"玩家{self.active_player}开始充能")
+                        # 检查弹射物是否有效
+                        if (hasattr(self.projectile, 'body') and 
+                            hasattr(self.projectile.body, 'position') and 
+                            not math.isnan(self.projectile.body.position.x) and 
+                            not math.isnan(self.projectile.body.position.y)):
+                            # 如果弹射物有效，开始充能
+                            self.charging = True
+                            self.shoot_strength = 0
+                            print(f"玩家{self.active_player}开始充能")
+                        else:
+                            # 如果弹射物无效，重置并创建新的
+                            print("检测到无效弹射物，重新创建")
+                            self.projectile = None
+                            
+                            # 获取鼠标位置
+                            mouse_pos = pygame.mouse.get_pos()
+                            
+                            # 确保鼠标位置在屏幕范围内
+                            x = max(30, min(mouse_pos[0], self.screen_width - 30))
+                            y = max(30, min(mouse_pos[1], self.screen_height - 100))
+                            
+                            # 创建新的铅笔弹射物
+                            self.projectile = Projectile(x, y, self.space)
+                            print(f"玩家{self.active_player}添加了新的铅笔弹射物")
+                            
+                            # 开始充能
+                            self.charging = True
+                            self.shoot_strength = 0
                     
                 # 如果是游戏结束状态，检查是否点击了返回主菜单
                 elif self.current_state == GameState.GAME_OVER:
@@ -294,7 +403,7 @@ class GameManager:
                     mouse_pos = pygame.mouse.get_pos()
                     
                     # 计算发射方向
-                    if self.projectile:
+                    if self.projectile and hasattr(self.projectile, 'body') and hasattr(self.projectile.body, 'position'):
                         dx = mouse_pos[0] - self.projectile.body.position.x
                         dy = mouse_pos[1] - self.projectile.body.position.y
                         angle = math.atan2(dy, dx)
@@ -309,6 +418,11 @@ class GameManager:
                         
                         # 切换玩家
                         self.active_player = 2 if self.active_player == 1 else 1
+                    else:
+                        # 如果弹射物无效，重置状态
+                        self.projectile = None
+                        self.charging = False
+                        print("弹射物无效，已重置状态")
         
         elif event.type == pygame.MOUSEMOTION:
             # 如果正在拖动棋子，更新棋子位置
@@ -627,12 +741,23 @@ class GameManager:
             screen.blit(charge_text, (190, 38))
 
             # 绘制方向指示线
-            if self.projectile:
-                mouse_pos = pygame.mouse.get_pos()
-                pygame.draw.line(screen, (255, 0, 0), 
-                              (int(self.projectile.body.position.x), int(self.projectile.body.position.y)),
-                              mouse_pos, 2)
-            
+            if self.projectile and hasattr(self.projectile, 'body') and hasattr(self.projectile.body, 'position'):
+                try:
+                    # 检查位置是否有效（防止NaN值）
+                    if (math.isnan(self.projectile.body.position.x) or 
+                        math.isnan(self.projectile.body.position.y)):
+                        print("警告：绘制方向指示线时检测到无效的弹射物位置")
+                    else:
+                        mouse_pos = pygame.mouse.get_pos()
+                        pygame.draw.line(screen, (255, 0, 0), 
+                                      (int(self.projectile.body.position.x), int(self.projectile.body.position.y)),
+                                      mouse_pos, 2)
+                except Exception as e:
+                    print(f"绘制方向指示线时出错: {e}")
+                    # 如果出现错误，重置弹射物
+                    self.projectile = None
+                    self.charging = False
+        
     def draw_game_over(self, screen):
         """绘制游戏结束界面"""
         # 绘制半透明背景
@@ -672,6 +797,10 @@ class GameManager:
         self.space = pymunk.Space()
         self.space.gravity = (0, 200)  # 进一步增加重力
         self.space.damping = 0.85  # 进一步减小阻尼，使物体运动更流畅
+        
+        # 重新设置碰撞处理
+        self.space.add_collision_handler(3, 0).begin = self.go_chess_ground_collision_handler
+        self.space.add_collision_handler(self.projectile_collision_type, self.ground_collision_type).begin = self.projectile_ground_collision_handler
         
         # 重新创建地面
         self.create_ground()

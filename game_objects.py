@@ -144,10 +144,22 @@ class Projectile:
         self.body = pymunk.Body(mass, moment)
         self.body.position = x, y
         
+        # 初始状态下设置为静态，防止乱跑
+        self.body.body_type = pymunk.Body.STATIC
+        
         # 创建铅笔形状（长方形）
         self.shape = pymunk.Poly.create_box(self.body, (self.length, self.width))
-        self.shape.elasticity = 0.95
-        self.shape.friction = 0.2
+        self.shape.elasticity = 0.5  # 降低弹性，防止过度弹跳
+        self.shape.friction = 0.8    # 增加摩擦力，使其更稳定
+        
+        # 设置碰撞类型，用于与地面的碰撞处理
+        self.shape.collision_type = 4  # 弹射物碰撞类型
+        
+        # 设置碰撞过滤器，确保与地面和棋子正确碰撞
+        self.shape.filter = pymunk.ShapeFilter(
+            categories=0x8,  # 弹射物类别
+            mask=0x4 | 0x1 | 0x2  # 地面、玩家1和玩家2类别
+        )
         
         # 铅笔颜色
         self.pencil_color = (255, 215, 0)  # 金黄色铅笔
@@ -155,71 +167,98 @@ class Projectile:
         
         # 添加到物理空间
         space.add(self.body, self.shape)
-        
+    
     def apply_impulse(self, direction, strength):
         """施加冲量以发射弹射物"""
-        # 设置铅笔的角度，使笔尖朝向发射方向
-        angle = math.atan2(direction.y, direction.x)
-        self.body.angle = angle
-        
-        # 施加冲量
-        self.body.apply_impulse_at_local_point(direction * strength)
+        try:
+            # 在发射前将铅笔设置为动态，使其受重力影响
+            self.body.body_type = pymunk.Body.DYNAMIC
+            
+            # 检查方向向量是否有效
+            if math.isnan(direction.x) or math.isnan(direction.y):
+                print("警告：发射方向包含NaN值，使用默认方向")
+                direction = pymunk.Vec2d(1, 0)  # 默认向右发射
+            
+            # 确保方向向量不为零
+            if direction.length < 0.001:
+                print("警告：发射方向向量接近零，使用默认方向")
+                direction = pymunk.Vec2d(1, 0)  # 默认向右发射
+            else:
+                # 标准化方向向量
+                direction = direction.normalized()
+            
+            # 设置铅笔的角度，使笔尖朝向发射方向
+            angle = math.atan2(direction.y, direction.x)
+            self.body.angle = angle
+            
+            # 确保强度有效
+            if math.isnan(strength) or strength <= 0:
+                print("警告：发射强度无效，使用默认强度")
+                strength = 500  # 默认强度
+            
+            # 施加冲量
+            self.body.apply_impulse_at_local_point(direction * strength)
+        except Exception as e:
+            print(f"施加冲量时出错: {e}")
         
     def draw(self, screen, draw_options=None):
         """绘制铅笔形状的弹射物"""
-        if hasattr(self, 'body') and hasattr(self.body, 'position'):
-            # 检查位置是否有效
-            if math.isnan(self.body.position.x) or math.isnan(self.body.position.y):
-                return
+        try:
+            if hasattr(self, 'body') and hasattr(self.body, 'position'):
+                # 检查位置是否有效
+                if math.isnan(self.body.position.x) or math.isnan(self.body.position.y):
+                    print("警告：检测到无效的弹射物位置")
+                    return
+                    
+                # 获取铅笔的位置和角度
+                x, y = int(self.body.position.x), int(self.body.position.y)
+                angle = self.body.angle
                 
-            # 获取铅笔的位置和角度
-            x, y = int(self.body.position.x), int(self.body.position.y)
-            angle = self.body.angle
-            
-            # 计算铅笔的四个角点
-            half_length = self.length / 2
-            half_width = self.width / 2
-            
-            # 铅笔主体的四个角点（顺时针）
-            points = [
-                (-half_length, -half_width),
-                (half_length, -half_width),
-                (half_length, half_width),
-                (-half_length, half_width)
-            ]
-            
-            # 旋转并平移点
-            rotated_points = []
-            for px, py in points:
-                # 旋转
-                rx = px * math.cos(angle) - py * math.sin(angle)
-                ry = px * math.sin(angle) + py * math.cos(angle)
-                # 平移
-                rotated_points.append((x + rx, y + ry))
-            
-            # 绘制铅笔主体
-            pygame.draw.polygon(screen, self.pencil_color, rotated_points)
-            pygame.draw.polygon(screen, (0, 0, 0), rotated_points, 1)  # 黑色边框
-            
-            # 计算笔尖位置（铅笔前端的三角形）
-            tip_length = 10
-            tip_points = [
-                (half_length, 0),  # 笔尖
-                (half_length - tip_length, -half_width),  # 左下角
-                (half_length - tip_length, half_width)    # 右下角
-            ]
-            
-            # 旋转并平移笔尖点
-            rotated_tip_points = []
-            for px, py in tip_points:
-                # 旋转
-                rx = px * math.cos(angle) - py * math.sin(angle)
-                ry = px * math.sin(angle) + py * math.cos(angle)
-                # 平移
-                rotated_tip_points.append((x + rx, y + ry))
-            
-            # 绘制笔尖
-            pygame.draw.polygon(screen, self.tip_color, rotated_tip_points)
+                # 计算铅笔的四个角点
+                half_length = self.length / 2
+                half_width = self.width / 2
+                
+                # 铅笔主体的四个角点（顺时针）
+                points = [
+                    (-half_length, -half_width),
+                    (half_length, -half_width),
+                    (half_length, half_width),
+                    (-half_length, half_width)
+                ]
+                
+                # 旋转并平移点
+                rotated_points = []
+                for px, py in points:
+                    # 旋转
+                    rx = px * math.cos(angle) - py * math.sin(angle)
+                    ry = px * math.sin(angle) + py * math.cos(angle)
+                    # 平移
+                    rotated_points.append((x + rx, y + ry))
+                
+                # 绘制铅笔主体
+                pygame.draw.polygon(screen, self.pencil_color, rotated_points)
+                
+                # 绘制笔尖（三角形）
+                tip_length = half_length * 0.3
+                tip_points = [
+                    (half_length, 0),
+                    (half_length + tip_length, -half_width * 0.5),
+                    (half_length + tip_length, half_width * 0.5)
+                ]
+                
+                # 旋转并平移笔尖点
+                rotated_tip_points = []
+                for px, py in tip_points:
+                    # 旋转
+                    rx = px * math.cos(angle) - py * math.sin(angle)
+                    ry = px * math.sin(angle) + py * math.cos(angle)
+                    # 平移
+                    rotated_tip_points.append((x + rx, y + ry))
+                
+                # 绘制笔尖
+                pygame.draw.polygon(screen, self.tip_color, rotated_tip_points)
+        except Exception as e:
+            print(f"绘制弹射物时出错: {e}")
 
 # 模型/堡垒类
 class ChessModel:
