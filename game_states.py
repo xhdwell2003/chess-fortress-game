@@ -443,7 +443,7 @@ class GameManager:
             
         # 如果正在拖动棋子，绘制它
         if self.dragging and self.drag_piece:
-            ChessPiece.draw_at_body_position(screen, self.drag_piece, self.selected_chess_type)
+            ChessPiece.draw_at_body_position(screen, self.drag_piece, self.drag_piece.chess_type)
             
         # 显示棋子数量
         pieces_count = len(current_model.pieces)
