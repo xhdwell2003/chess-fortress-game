@@ -29,6 +29,10 @@ class GameManager:
         # 创建地面
         self.create_ground()
         
+        # 设置碰撞处理
+        # 为围棋和地面设置特殊的碰撞处理
+        self.space.add_collision_handler(3, 0).begin = self.go_chess_ground_collision_handler
+        
         # 玩家模型
         self.player1_model = ChessModel(1)
         self.player2_model = ChessModel(2)
@@ -105,6 +109,7 @@ class GameManager:
                                       (self.screen_width, self.screen_height - 50), 5)
         ground_shape.friction = 1.0  # 最大摩擦力，防止滑动
         ground_shape.elasticity = 0.1  # 很低的弹性，防止弹跳
+        ground_shape.collision_type = 0  # 地面碰撞类型
         self.space.add(ground_body, ground_shape)
         
         # 左边界
@@ -121,6 +126,25 @@ class GameManager:
         right_shape.friction = 1.0
         right_shape.elasticity = 0.1
         self.space.add(right_body, right_shape)
+        
+    def go_chess_ground_collision_handler(self, arbiter, space, data):
+        """围棋与地面的碰撞处理函数"""
+        # 获取碰撞的围棋棋子
+        go_chess_shape = arbiter.shapes[0]
+        ground_shape = arbiter.shapes[1]
+        
+        # 确保围棋不会穿过地面
+        if hasattr(go_chess_shape, 'body'):
+            # 获取围棋的位置
+            pos = go_chess_shape.body.position
+            # 如果围棋位置低于地面，将其拉回地面上方
+            if pos.y > self.screen_height - 70:  # 地面位置上方20像素
+                go_chess_shape.body.position = pymunk.Vec2d(pos.x, self.screen_height - 70)
+                go_chess_shape.body.velocity = pymunk.Vec2d(go_chess_shape.body.velocity.x, 0)
+                print("围棋碰撞地面，已调整位置")
+        
+        # 返回True表示允许碰撞继续处理
+        return True
         
     def update(self, dt):
         """更新游戏状态"""
@@ -178,6 +202,18 @@ class GameManager:
                         piece.body.position = (x, bottom_bound)
                         piece.body.velocity = (piece.body.velocity.x, 0)
                         
+                    # 特殊处理围棋棋子，防止穿过地面
+                    if hasattr(piece, 'chess_type') and piece.chess_type == ChessPieceType.GO_CHESS:
+                        # 地面位置
+                        ground_y = self.screen_height - 50
+                        # 如果围棋位置低于地面，将其拉回地面上方
+                        if y > ground_y - 20:  # 地面位置上方20像素
+                            piece.body.position = (x, ground_y - 20)
+                            piece.body.velocity = (piece.body.velocity.x, min(0, piece.body.velocity.y))
+                            # 增加一个向上的小力，帮助棋子弹起
+                            if piece.body.velocity.y > 0:
+                                piece.body.velocity = (piece.body.velocity.x, -50)
+                    
                     # 如果速度太小，直接停止移动
                     velocity_length = piece.body.velocity.length
                     if velocity_length < 5:

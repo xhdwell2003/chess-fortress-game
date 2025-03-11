@@ -40,9 +40,9 @@ class ChessPiece:
             # 围棋（三角形）
             # 为三角形计算惯性矩
             triangle_vertices = [
-                (-radius, radius), 
-                (radius, radius), 
-                (0, -radius)
+                (-radius*1.2, radius),  # 左下角更宽
+                (radius*1.2, radius),   # 右下角更宽
+                (0, -radius)            # 顶点不变
             ]
             moment = pymunk.moment_for_poly(mass, triangle_vertices, (0, 0))
             self.body = pymunk.Body(mass, moment)
@@ -53,6 +53,14 @@ class ChessPiece:
         # 设置物理属性
         self.shape.elasticity = 0.2  # 进一步降低弹性，减少弹跳
         self.shape.friction = 0.7  # 进一步降低摩擦力，使棋子能够更容易滑动
+        
+        # 为围棋棋子增加特殊处理，防止穿过地面
+        if chess_type == ChessPieceType.GO_CHESS:
+            self.shape.friction = 0.9  # 增加围棋的摩擦力
+            self.shape.elasticity = 0.1  # 降低围棋的弹性
+            # 增加碰撞过滤组，确保围棋与地面正确碰撞
+            self.shape.collision_type = 3  # 围棋专用碰撞类型
+        
         self.radius = radius
         
         # 确保棋子是动态的，能够受重力影响
@@ -83,11 +91,11 @@ class ChessPiece:
                     pygame.draw.rect(screen, (0, 255, 0), 
                                    (x - radius, y - radius, radius*2, radius*2))
                 elif chess_type == ChessPieceType.GO_CHESS:
-                    # 围棋（三角形）
+                    # 围棋（三角形）- 使用更宽的底部
                     points = [
                         (x, y - radius),
-                        (x - radius, y + radius),
-                        (x + radius, y + radius)
+                        (x - radius*1.2, y + radius),
+                        (x + radius*1.2, y + radius)
                     ]
                     pygame.draw.polygon(screen, (0, 0, 255), points)
         except Exception as e:
@@ -115,11 +123,11 @@ class ChessPiece:
                                    (x - self.radius, y - self.radius, 
                                     self.radius*2, self.radius*2))
                 elif self.chess_type == ChessPieceType.GO_CHESS:
-                    # 围棋（三角形）
+                    # 围棋（三角形）- 使用更宽的底部
                     points = [
                         (x, y - self.radius),
-                        (x - self.radius, y + self.radius),
-                        (x + self.radius, y + self.radius)
+                        (x - self.radius*1.2, y + self.radius),
+                        (x + self.radius*1.2, y + self.radius)
                     ]
                     pygame.draw.polygon(screen, (0, 0, 255), points)
         except Exception as e:
