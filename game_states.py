@@ -337,6 +337,22 @@ class GameManager:
                     # 保存玩家1的模型状态
                     self.player1_model_saved = True
                     
+                    # 保存玩家1棋子的位置
+                    self.player1_positions_saved = []
+                    print(f"开始保存玩家1的棋子位置，总数: {len(self.player1_model.pieces)}")
+                    for i, piece in enumerate(self.player1_model.pieces):
+                        if hasattr(piece, 'body') and hasattr(piece.body, 'position'):
+                            # 保存当前位置
+                            pos = (piece.body.position.x, piece.body.position.y)
+                            self.player1_positions_saved.append(pos)
+                            print(f"保存玩家1棋子 {i}，类型: {piece.chess_type.name}，位置: {pos}")
+                        else:
+                            # 如果没有body或position，使用初始位置
+                            self.player1_positions_saved.append(piece.position)
+                            print(f"使用初始位置: {piece.position}")
+                    
+                    print(f"已保存玩家1的所有棋子位置，数量: {len(self.player1_positions_saved)}")
+                    
                     # 临时移除玩家1的所有棋子，使其不影响玩家2的建造
                     for piece in self.player1_model.pieces:
                         if hasattr(piece, 'shape') and piece.shape in self.space.shapes:
@@ -690,46 +706,91 @@ class GameManager:
         print("游戏重置，返回主菜单")
 
     def prepare_battle_phase(self):
-        """准备战斗阶段，重新定位棋子模型并添加引导提示"""
-        print("准备战斗阶段...")
-        print(f"玩家1模型棋子数: {len(self.player1_model.pieces)}")
-        print(f"玩家2模型棋子数: {len(self.player2_model.pieces)}")
-        
-        # 确保我们不在拖动状态
+        """准备战斗阶段，重置拖动状态，设置棋子碰撞等"""
+        # 重置拖动状态
         self.dragging = False
         self.drag_piece = None
         
-        # 如果玩家1的模型被临时移除，现在重新添加到物理空间
-        if hasattr(self, 'player1_model_saved') and self.player1_model_saved:
-            print("重新添加玩家1的棋子到物理空间")
+        # 初始化棋子计数
+        self.player1_chess_counts = {
+            ChessPieceType.MILITARY_CHESS: 0,
+            ChessPieceType.CHINESE_CHESS: 0,
+            ChessPieceType.GO_CHESS: 0
+        }
+        self.player2_chess_counts = {
+            ChessPieceType.MILITARY_CHESS: 0,
+            ChessPieceType.CHINESE_CHESS: 0,
+            ChessPieceType.GO_CHESS: 0
+        }
+        
+        # 重新添加玩家1的棋子到物理空间（如果之前被移除）
+        if self.player1_model_saved:
+            # 使用保存的位置重新创建棋子
+            print(f"使用保存的位置重新创建玩家1的棋子，数量: {len(self.player1_positions_saved)}")
+            
+            # 确保玩家1的棋子数量与保存的位置数量一致
+            if len(self.player1_model.pieces) != len(self.player1_positions_saved):
+                print(f"警告：玩家1棋子数量({len(self.player1_model.pieces)})与保存的位置数量({len(self.player1_positions_saved)})不一致")
+            
+            # 清除所有现有的物理对象
             for piece in self.player1_model.pieces:
-                # 创建新的物理体和形状
-                piece.body = pymunk.Body(1, pymunk.moment_for_circle(1, 0, piece.radius))
-                piece.body.position = piece.position
-                
-                if piece.chess_type == ChessPieceType.MILITARY_CHESS:
-                    piece.shape = pymunk.Circle(piece.body, piece.radius)
-                elif piece.chess_type == ChessPieceType.CHINESE_CHESS:
-                    piece.shape = pymunk.Poly.create_box(piece.body, (piece.size, piece.size))
-                elif piece.chess_type == ChessPieceType.GO_CHESS:
-                    piece.shape = pymunk.Circle(piece.body, piece.radius)
-                    piece.shape.collision_type = 3  # 围棋特殊碰撞类型
-                
-                # 设置物理属性
-                piece.shape.friction = 0.7
-                piece.shape.elasticity = 0.3
-                
-                # 设置碰撞过滤器，使所有棋子都能相互碰撞
-                piece.shape.filter = pymunk.ShapeFilter(
-                    categories=0x1,  # 玩家1类别
-                    mask=0x4 | 0x1 | 0x2  # 地面、玩家1和玩家2类别
-                )
-                
-                # 添加到物理空间
-                self.space.add(piece.body, piece.shape)
+                if hasattr(piece, 'shape') and piece.shape in self.space.shapes:
+                    self.space.remove(piece.shape)
+                if hasattr(piece, 'body') and piece.body in self.space.bodies:
+                    self.space.remove(piece.body)
+            
+            # 使用保存的位置重新创建物理对象
+            for i, piece in enumerate(self.player1_model.pieces):
+                if i < len(self.player1_positions_saved):
+                    saved_pos = self.player1_positions_saved[i]
+                    print(f"重建玩家1棋子 {i}，类型: {piece.chess_type.name}，位置: {saved_pos}")
+                    
+                    # 创建新的物理体和形状
+                    if piece.chess_type == ChessPieceType.MILITARY_CHESS:
+                        # 军棋（长方形）
+                        width, height = piece.radius*2.5, piece.radius*1.5
+                        moment = pymunk.moment_for_box(1, (width, height))
+                        piece.body = pymunk.Body(1, moment)
+                        piece.body.position = saved_pos
+                        piece.shape = pymunk.Poly.create_box(piece.body, (width, height))
+                    elif piece.chess_type == ChessPieceType.CHINESE_CHESS:
+                        # 象棋（方形）
+                        size = piece.radius*2
+                        moment = pymunk.moment_for_box(1, (size, size))
+                        piece.body = pymunk.Body(1, moment)
+                        piece.body.position = saved_pos
+                        piece.shape = pymunk.Poly.create_box(piece.body, (size, size))
+                    elif piece.chess_type == ChessPieceType.GO_CHESS:
+                        # 围棋（三角形）
+                        triangle_vertices = [
+                            (-piece.radius*1.2, piece.radius),
+                            (piece.radius*1.2, piece.radius),
+                            (0, -piece.radius)
+                        ]
+                        moment = pymunk.moment_for_poly(1, triangle_vertices, (0, 0))
+                        piece.body = pymunk.Body(1, moment)
+                        piece.body.position = saved_pos
+                        piece.shape = pymunk.Poly(piece.body, triangle_vertices)
+                        piece.shape.collision_type = 3  # 围棋特殊碰撞类型
+                    
+                    # 设置物理属性
+                    piece.shape.friction = 0.7
+                    piece.shape.elasticity = 0.3
+                    
+                    # 设置碰撞过滤器，使所有棋子都能相互碰撞
+                    piece.shape.filter = pymunk.ShapeFilter(
+                        categories=0x1,  # 玩家1类别
+                        mask=0x4 | 0x1 | 0x2  # 地面、玩家1和玩家2类别
+                    )
+                    
+                    # 添加到物理空间
+                    self.space.add(piece.body, piece.shape)
+                else:
+                    print(f"警告：玩家1棋子索引{i}没有对应的保存位置")
             
             self.player1_model_saved = False
         else:
+            print("警告：没有找到玩家1的保存模型，无法正确重建")
             # 重新启用玩家1棋子的碰撞和动态特性
             for piece in self.player1_model.pieces:
                 if hasattr(piece, 'shape'):
@@ -748,18 +809,6 @@ class GameManager:
                     categories=0x2,  # 玩家2类别
                     mask=0x4 | 0x1 | 0x2  # 地面、玩家1和玩家2类别
                 )
-        
-        # 重新定位玩家1的模型到左侧
-        offset_x1 = 200
-        for piece in self.player1_model.pieces:
-            if hasattr(piece, 'body') and piece.body.position.x > self.screen_width / 2:
-                piece.body.position = piece.body.position.x - offset_x1, piece.body.position.y
-                
-        # 重新定位玩家2的模型到右侧
-        offset_x2 = 200
-        for piece in self.player2_model.pieces:
-            if hasattr(piece, 'body') and piece.body.position.x < self.screen_width / 2:
-                piece.body.position = piece.body.position.x + offset_x2, piece.body.position.y
         
         # 清除任何现有的弹射物
         self.projectile = None
