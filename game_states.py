@@ -325,6 +325,18 @@ class GameManager:
                 if self.current_player == 1:
                     print("玩家1完成建造，切换到玩家2")
                     self.current_player = 2
+                    
+                    # 保存玩家1的模型状态
+                    self.player1_model_saved = True
+                    
+                    # 临时移除玩家1的所有棋子，使其不影响玩家2的建造
+                    for piece in self.player1_model.pieces:
+                        if hasattr(piece, 'shape') and piece.shape in self.space.shapes:
+                            self.space.remove(piece.shape)
+                        if hasattr(piece, 'body') and piece.body in self.space.bodies:
+                            self.space.remove(piece.body)
+                    
+                    print(f"已临时移除玩家1的所有棋子，数量: {len(self.player1_model.pieces)}")
                 else:
                     print("玩家2完成建造，准备进入战斗阶段")
                     self.current_state = GameState.BATTLE
@@ -451,6 +463,24 @@ class GameManager:
         # 获取当前玩家的棋子计数
         current_chess_counts = self.player1_chess_counts if self.current_player == 1 else self.player2_chess_counts
         
+        # 如果是玩家2建造阶段，绘制玩家1的模型（静态显示）
+        if self.current_player == 2 and hasattr(self, 'player1_model_saved') and self.player1_model_saved:
+            # 绘制半透明背景，表示这是玩家1的模型区域
+            overlay = pygame.Surface((self.screen_width // 2, self.screen_height), pygame.SRCALPHA)
+            overlay.fill((200, 200, 200, 100))  # 半透明灰色背景
+            screen.blit(overlay, (0, 0))
+            
+            # 绘制分隔线
+            pygame.draw.line(screen, (0, 0, 0), (self.screen_width // 2, 0), 
+                           (self.screen_width // 2, self.screen_height), 3)
+            
+            # 添加提示文字
+            hint = self.font.render("玩家1的模型（已保存）", True, (0, 0, 0))
+            screen.blit(hint, (self.screen_width // 4 - hint.get_width() // 2, self.screen_height // 2 - 20))
+            
+            hint2 = self.small_font.render("请在右侧区域建造玩家2的模型", True, (0, 0, 0))
+            screen.blit(hint2, (self.screen_width // 4 - hint2.get_width() // 2, self.screen_height // 2 + 20))
+        
         # 绘制玩家可用的棋子类型
         chess_types = [
             ("军棋(1)", ChessPieceType.MILITARY_CHESS, (40, 40)),
@@ -555,10 +585,10 @@ class GameManager:
         
         # 绘制两个玩家的模型
         for piece in self.player1_model.pieces:
-            piece.draw(screen, self.draw_options)
+            piece.draw(screen)
             
         for piece in self.player2_model.pieces:
-            piece.draw(screen, self.draw_options)
+            piece.draw(screen)
             
         # 绘制弹射物
         if self.projectile:
@@ -664,18 +694,68 @@ class GameManager:
         self.dragging = False
         self.drag_piece = None
         
+        # 如果玩家1的模型被临时移除，现在重新添加到物理空间
+        if hasattr(self, 'player1_model_saved') and self.player1_model_saved:
+            print("重新添加玩家1的棋子到物理空间")
+            for piece in self.player1_model.pieces:
+                # 创建新的物理体和形状
+                piece.body = pymunk.Body(1, pymunk.moment_for_circle(1, 0, piece.radius))
+                piece.body.position = piece.position
+                
+                if piece.chess_type == ChessPieceType.MILITARY_CHESS:
+                    piece.shape = pymunk.Circle(piece.body, piece.radius)
+                elif piece.chess_type == ChessPieceType.CHINESE_CHESS:
+                    piece.shape = pymunk.Poly.create_box(piece.body, (piece.size, piece.size))
+                elif piece.chess_type == ChessPieceType.GO_CHESS:
+                    piece.shape = pymunk.Circle(piece.body, piece.radius)
+                    piece.shape.collision_type = 3  # 围棋特殊碰撞类型
+                
+                # 设置物理属性
+                piece.shape.friction = 0.7
+                piece.shape.elasticity = 0.3
+                
+                # 设置碰撞过滤器，使所有棋子都能相互碰撞
+                piece.shape.filter = pymunk.ShapeFilter(
+                    categories=0x1,  # 玩家1类别
+                    mask=0x4 | 0x1 | 0x2  # 地面、玩家1和玩家2类别
+                )
+                
+                # 添加到物理空间
+                self.space.add(piece.body, piece.shape)
+            
+            self.player1_model_saved = False
+        else:
+            # 重新启用玩家1棋子的碰撞和动态特性
+            for piece in self.player1_model.pieces:
+                if hasattr(piece, 'shape'):
+                    # 恢复碰撞过滤器，使所有棋子都能相互碰撞
+                    piece.shape.filter = pymunk.ShapeFilter(
+                        categories=0x1,  # 玩家1类别
+                        mask=0x4 | 0x1 | 0x2  # 地面、玩家1和玩家2类别
+                    )
+                    # 将玩家1的棋子恢复为动态
+                    piece.body.body_type = pymunk.Body.DYNAMIC
+        
+        # 确保玩家2的棋子也能与玩家1的棋子碰撞
+        for piece in self.player2_model.pieces:
+            if hasattr(piece, 'shape'):
+                piece.shape.filter = pymunk.ShapeFilter(
+                    categories=0x2,  # 玩家2类别
+                    mask=0x4 | 0x1 | 0x2  # 地面、玩家1和玩家2类别
+                )
+        
         # 重新定位玩家1的模型到左侧
         offset_x1 = 200
         for piece in self.player1_model.pieces:
-            if piece.body.position.x > self.screen_width / 2:
+            if hasattr(piece, 'body') and piece.body.position.x > self.screen_width / 2:
                 piece.body.position = piece.body.position.x - offset_x1, piece.body.position.y
                 
         # 重新定位玩家2的模型到右侧
         offset_x2 = 200
         for piece in self.player2_model.pieces:
-            if piece.body.position.x < self.screen_width / 2:
+            if hasattr(piece, 'body') and piece.body.position.x < self.screen_width / 2:
                 piece.body.position = piece.body.position.x + offset_x2, piece.body.position.y
-
+        
         # 清除任何现有的弹射物
         self.projectile = None
         self.charging = False

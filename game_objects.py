@@ -16,6 +16,9 @@ class ChessPieceType(Enum):
 class ChessPiece:
     def __init__(self, x, y, space, chess_type, radius=20, mass=20.0):
         self.chess_type = chess_type
+        self.position = (x, y)  # 保存初始位置
+        self.radius = radius    # 保存半径，用于重建形状
+        self.size = radius*2    # 保存尺寸，用于重建形状
         
         # 根据棋子类型创建不同形状和计算正确的惯性矩
         if chess_type == ChessPieceType.MILITARY_CHESS:
@@ -60,8 +63,6 @@ class ChessPiece:
             self.shape.elasticity = 0.1  # 降低围棋的弹性
             # 增加碰撞过滤组，确保围棋与地面正确碰撞
             self.shape.collision_type = 3  # 围棋专用碰撞类型
-        
-        self.radius = radius
         
         # 确保棋子是动态的，能够受重力影响
         self.body.body_type = pymunk.Body.DYNAMIC
