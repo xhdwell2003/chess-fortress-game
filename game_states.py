@@ -49,6 +49,7 @@ class GameManager:
         self.dragging = False
         self.drag_piece = None
         self.drag_offset = (0, 0)
+        self.is_dragging_existing_piece = False
         
         # 游戏胜利者
         self.winner = None
@@ -242,6 +243,7 @@ class GameManager:
             # 如果正在拖动棋子，更新棋子位置
             if self.dragging and self.drag_piece:
                 mouse_pos = pygame.mouse.get_pos()
+                # 考虑拖动偏移
                 self.drag_piece.body.position = (mouse_pos[0] - self.drag_offset[0], 
                                                mouse_pos[1] - self.drag_offset[1])
         
@@ -393,8 +395,8 @@ class GameManager:
         for i, (name, chess_type, pos) in enumerate(chess_types):
             # 绘制棋子示例
             if chess_type == ChessPieceType.MILITARY_CHESS:
-                # 军棋是圆形
-                pygame.draw.circle(screen, (255, 0, 0), pos, 15)
+                # 军棋是长方形
+                pygame.draw.rect(screen, (255, 0, 0), (pos[0]-18, pos[1]-11, 36, 22))
             elif chess_type == ChessPieceType.CHINESE_CHESS:
                 # 象棋是方形
                 pygame.draw.rect(screen, (0, 255, 0), (pos[0]-15, pos[1]-15, 30, 30))
@@ -552,6 +554,7 @@ class GameManager:
         self.dragging = False
         self.drag_piece = None
         self.drag_offset = (0, 0)
+        self.is_dragging_existing_piece = False
         
         print("游戏重置，返回主菜单")
 
@@ -584,18 +587,65 @@ class GameManager:
         print("战斗阶段准备完毕")
 
     def start_dragging(self, x, y):
-        """开始拖动一个新棋子"""
-        # 创建一个新棋子用于拖动
-        self.drag_piece = ChessPiece(x, y, self.space, self.selected_chess_type)
+        """开始拖动一个棋子，如果点击在已有棋子上则移动该棋子，否则创建新棋子"""
+        # 获取当前玩家模型
+        current_model = self.player1_model if self.current_player == 1 else self.player2_model
         
-        # 设置拖动偏移
-        self.drag_offset = (0, 0)
+        # 检查是否点击在已有棋子上
+        clicked_piece = None
+        for piece in current_model.pieces:
+            if hasattr(piece, 'body') and hasattr(piece.body, 'position'):
+                # 根据棋子类型计算点击检测范围
+                px, py = piece.body.position
+                if piece.chess_type == ChessPieceType.MILITARY_CHESS:
+                    # 军棋（长方形）
+                    width, height = piece.radius*2.5, piece.radius*1.5
+                    if (px - width/2 <= x <= px + width/2 and 
+                        py - height/2 <= y <= py + height/2):
+                        clicked_piece = piece
+                        break
+                elif piece.chess_type == ChessPieceType.CHINESE_CHESS:
+                    # 象棋（方形）
+                    size = piece.radius*2
+                    if (px - size/2 <= x <= px + size/2 and 
+                        py - size/2 <= y <= py + size/2):
+                        clicked_piece = piece
+                        break
+                elif piece.chess_type == ChessPieceType.GO_CHESS:
+                    # 围棋（三角形）- 简化为圆形检测
+                    if ((x - px)**2 + (y - py)**2 <= piece.radius**2):
+                        clicked_piece = piece
+                        break
         
-        # 设置拖动状态
-        self.dragging = True
-        
-        print(f"开始拖动棋子，初始位置: ({x}, {y}), 类型: {self.selected_chess_type.name}")
-        
+        if clicked_piece:
+            # 如果点击在已有棋子上，设置为拖动该棋子
+            print(f"开始拖动已有棋子，位置: ({x}, {y}), 类型: {clicked_piece.chess_type.name}")
+            
+            # 从模型中移除该棋子（暂时）
+            current_model.pieces.remove(clicked_piece)
+            
+            # 设置为当前拖动的棋子
+            self.drag_piece = clicked_piece
+            
+            # 计算拖动偏移（鼠标位置与棋子中心的差值）
+            self.drag_offset = (x - clicked_piece.body.position.x, y - clicked_piece.body.position.y)
+            
+            # 设置拖动状态
+            self.dragging = True
+            self.is_dragging_existing_piece = True
+        else:
+            # 如果点击在空白处，创建一个新棋子
+            self.drag_piece = ChessPiece(x, y, self.space, self.selected_chess_type)
+            
+            # 设置拖动偏移
+            self.drag_offset = (0, 0)
+            
+            # 设置拖动状态
+            self.dragging = True
+            self.is_dragging_existing_piece = False
+            
+            print(f"开始拖动新棋子，初始位置: ({x}, {y}), 类型: {self.selected_chess_type.name}")
+
     def stop_dragging(self):
         """结束棋子拖动操作，放置当前拖动中的棋子"""
         print("尝试放置棋子...")
@@ -613,11 +663,20 @@ class GameManager:
         if mouse_pos[1] >= self.screen_height - 50:
             # 如果拖到了底部区域，放弃放置该棋子
             print("棋子拖放到底部区域外，放弃放置")
-            if self.drag_piece in self.space.bodies:
-                print("从物理空间移除临时棋子")
-                if self.drag_piece.shape in self.space.shapes:
+            try:
+                if hasattr(self.drag_piece, 'shape') and self.drag_piece.shape in self.space.shapes:
                     self.space.remove(self.drag_piece.shape)
-                self.space.remove(self.drag_piece)
+                if self.drag_piece in self.space.bodies:
+                    self.space.remove(self.drag_piece.body)
+            except Exception as e:
+                print(f"移除临时棋子时出错: {e}")
+            
+            # 如果是拖动已有棋子，需要将其重新添加到模型中
+            if hasattr(self, 'is_dragging_existing_piece') and self.is_dragging_existing_piece:
+                current_model = self.player1_model if self.current_player == 1 else self.player2_model
+                current_model.add_piece(self.drag_piece)
+                print(f"已有棋子拖放失败，重新添加到模型中")
+            
             self.dragging = False
             self.drag_piece = None
             return
@@ -627,29 +686,70 @@ class GameManager:
         # 获取当前玩家模型
         current_model = self.player1_model if self.current_player == 1 else self.player2_model
         
-        # 核心改变：创建一个全新的静态棋子替代当前拖动棋子
-        x, y = mouse_pos
-        new_piece = ChessPiece(x, y, self.space, self.selected_chess_type)
-        new_piece.body.position = (x, y)
-        
-        # 为棋子设置物理属性
-        new_piece.body.velocity = (0, 0)  # 确保初始速度为零
-        print(f"棋子初始位置: {new_piece.body.position}, 初始速度: {new_piece.body.velocity}")
-        
-        # 把棋子添加到当前玩家的模型中
-        current_model.add_piece(new_piece)
-        print(f"添加棋子到玩家{self.current_player}模型，当前模型棋子数: {len(current_model.pieces)}")
-        
-        # 如果拖动中的临时棋子还在物理空间中，移除它
-        if self.drag_piece and self.drag_piece in self.space.bodies:
-            if hasattr(self.drag_piece, 'shape') and self.drag_piece.shape in self.space.shapes:
-                self.space.remove(self.drag_piece.shape)
-            self.space.remove(self.drag_piece)
-            print("移除临时拖动棋子")
+        # 区分处理拖动已有棋子和放置新棋子的情况
+        if hasattr(self, 'is_dragging_existing_piece') and self.is_dragging_existing_piece:
+            # 处理拖动已有棋子的情况
+            try:
+                # 更新棋子位置
+                x, y = mouse_pos
+                # 考虑拖动偏移
+                adjusted_x = x - self.drag_offset[0]
+                adjusted_y = y - self.drag_offset[1]
+                
+                # 确保位置有效
+                if math.isnan(adjusted_x) or math.isnan(adjusted_y):
+                    print("警告：检测到无效的棋子位置，重置为鼠标位置")
+                    adjusted_x, adjusted_y = x, y
+                
+                self.drag_piece.body.position = pymunk.Vec2d(adjusted_x, adjusted_y)
+                self.drag_piece.body.velocity = (0, 0)  # 重置速度
+                
+                print(f"已有棋子位置已更新: {self.drag_piece.body.position}")
+                
+                # 将棋子重新添加到模型中
+                current_model.add_piece(self.drag_piece)
+                print(f"已有棋子已重新添加到玩家{self.current_player}模型中")
+            except Exception as e:
+                print(f"更新已有棋子位置时出错: {e}")
+                # 出错时也要将棋子重新添加到模型中
+                current_model.add_piece(self.drag_piece)
+        else:
+            # 处理放置新棋子的情况
+            try:
+                # 创建一个全新的棋子替代当前拖动棋子
+                x, y = mouse_pos
+                new_piece = ChessPiece(x, y, self.space, self.selected_chess_type)
+                
+                # 确保棋子的物理属性正确设置
+                new_piece.body.velocity = (0, 0)  # 初始速度为零
+                
+                # 确保棋子位置有效（防止NaN值）
+                if math.isnan(new_piece.body.position.x) or math.isnan(new_piece.body.position.y):
+                    print("警告：检测到无效的棋子位置，重置为鼠标位置")
+                    new_piece.body.position = pymunk.Vec2d(x, y)
+                
+                print(f"新棋子初始位置: {new_piece.body.position}, 初始速度: {new_piece.body.velocity}")
+                
+                # 把棋子添加到当前玩家的模型中
+                current_model.add_piece(new_piece)
+                print(f"添加新棋子到玩家{self.current_player}模型，当前模型棋子数: {len(current_model.pieces)}")
+                
+                # 移除拖动中的临时棋子
+                try:
+                    if hasattr(self.drag_piece, 'shape') and self.drag_piece.shape in self.space.shapes:
+                        self.space.remove(self.drag_piece.shape)
+                    if hasattr(self.drag_piece, 'body') and self.drag_piece.body in self.space.bodies:
+                        self.space.remove(self.drag_piece.body)
+                    print("移除临时拖动棋子")
+                except Exception as e:
+                    print(f"移除临时拖动棋子时出错: {e}")
+            except Exception as e:
+                print(f"创建新棋子时出错: {e}")
         
         # 重置拖动状态
         self.dragging = False
         self.drag_piece = None
+        self.is_dragging_existing_piece = False
         
         # 最终验证
         current_model = self.player1_model if self.current_player == 1 else self.player2_model

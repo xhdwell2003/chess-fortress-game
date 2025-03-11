@@ -17,27 +17,36 @@ class ChessPiece:
     def __init__(self, x, y, space, chess_type, radius=20, mass=10.0):
         self.chess_type = chess_type
         
-        # 创建棋子的物理body
-        moment = pymunk.moment_for_circle(mass, 0, radius)
-        self.body = pymunk.Body(mass, moment)
-        self.body.position = (x, y)
-        
-        # 根据棋子类型创建不同形状
+        # 根据棋子类型创建不同形状和计算正确的惯性矩
         if chess_type == ChessPieceType.MILITARY_CHESS:
-            # 军棋（圆形）
-            self.shape = pymunk.Circle(self.body, radius)
-            self.shape_type = "circle"
+            # 军棋（长方形）
+            width, height = radius*2.5, radius*1.5
+            # 为长方形计算正确的惯性矩
+            moment = pymunk.moment_for_box(mass, (width, height))
+            self.body = pymunk.Body(mass, moment)
+            self.body.position = (x, y)
+            self.shape = pymunk.Poly.create_box(self.body, (width, height))
+            self.shape_type = "rectangle"
         elif chess_type == ChessPieceType.CHINESE_CHESS:
             # 象棋（方形）
-            self.shape = pymunk.Poly.create_box(self.body, (radius*2, radius*2))
+            size = radius*2
+            # 为方形计算正确的惯性矩
+            moment = pymunk.moment_for_box(mass, (size, size))
+            self.body = pymunk.Body(mass, moment)
+            self.body.position = (x, y)
+            self.shape = pymunk.Poly.create_box(self.body, (size, size))
             self.shape_type = "box"
         elif chess_type == ChessPieceType.GO_CHESS:
             # 围棋（三角形）
+            # 为三角形计算惯性矩
             triangle_vertices = [
                 (-radius, radius), 
                 (radius, radius), 
                 (0, -radius)
             ]
+            moment = pymunk.moment_for_poly(mass, triangle_vertices, (0, 0))
+            self.body = pymunk.Body(mass, moment)
+            self.body.position = (x, y)
             self.shape = pymunk.Poly(self.body, triangle_vertices)
             self.shape_type = "triangle"
         
@@ -52,47 +61,66 @@ class ChessPiece:
     @staticmethod
     def draw_at_body_position(screen, piece, chess_type):
         """静态方法，在指定位置绘制棋子"""
-        if piece and hasattr(piece, 'body'):
-            x, y = int(piece.body.position.x), int(piece.body.position.y)
-            radius = getattr(piece, 'radius', 20)
-            
-            if chess_type == ChessPieceType.MILITARY_CHESS:
-                # 军棋（圆形）
-                pygame.draw.circle(screen, (255, 0, 0), (x, y), radius)
-            elif chess_type == ChessPieceType.CHINESE_CHESS:
-                # 象棋（方形）
-                pygame.draw.rect(screen, (0, 255, 0), 
-                               (x - radius, y - radius, radius*2, radius*2))
-            elif chess_type == ChessPieceType.GO_CHESS:
-                # 围棋（三角形）
-                points = [
-                    (x, y - radius),
-                    (x - radius, y + radius),
-                    (x + radius, y + radius)
-                ]
-                pygame.draw.polygon(screen, (0, 0, 255), points)
+        try:
+            if piece and hasattr(piece, 'body'):
+                # 检查位置是否有效（防止NaN值）
+                if (math.isnan(piece.body.position.x) or math.isnan(piece.body.position.y)):
+                    print(f"警告：检测到无效的棋子位置: {piece.body.position}")
+                    return
+                    
+                x, y = int(piece.body.position.x), int(piece.body.position.y)
+                radius = getattr(piece, 'radius', 20)
+                
+                if chess_type == ChessPieceType.MILITARY_CHESS:
+                    # 军棋（长方形）
+                    pygame.draw.rect(screen, (255, 0, 0), 
+                                   (x - radius*1.25, y - radius*0.75, radius*2.5, radius*1.5))
+                elif chess_type == ChessPieceType.CHINESE_CHESS:
+                    # 象棋（方形）
+                    pygame.draw.rect(screen, (0, 255, 0), 
+                                   (x - radius, y - radius, radius*2, radius*2))
+                elif chess_type == ChessPieceType.GO_CHESS:
+                    # 围棋（三角形）
+                    points = [
+                        (x, y - radius),
+                        (x - radius, y + radius),
+                        (x + radius, y + radius)
+                    ]
+                    pygame.draw.polygon(screen, (0, 0, 255), points)
+        except Exception as e:
+            print(f"静态绘制棋子时出错: {e}")
     
     def draw(self, screen):
         """绘制棋子到屏幕上"""
-        if hasattr(self, 'body') and hasattr(self.body, 'position'):
-            x, y = int(self.body.position.x), int(self.body.position.y)
-            
-            if self.chess_type == ChessPieceType.MILITARY_CHESS:
-                # 军棋（圆形）
-                pygame.draw.circle(screen, (255, 0, 0), (x, y), self.radius)
-            elif self.chess_type == ChessPieceType.CHINESE_CHESS:
-                # 象棋（方形）
-                pygame.draw.rect(screen, (0, 255, 0), 
-                               (x - self.radius, y - self.radius, 
-                                self.radius*2, self.radius*2))
-            elif self.chess_type == ChessPieceType.GO_CHESS:
-                # 围棋（三角形）
-                points = [
-                    (x, y - self.radius),
-                    (x - self.radius, y + self.radius),
-                    (x + self.radius, y + self.radius)
-                ]
-                pygame.draw.polygon(screen, (0, 0, 255), points)
+        try:
+            if hasattr(self, 'body') and hasattr(self.body, 'position'):
+                # 检查位置是否有效（防止NaN值）
+                if (math.isnan(self.body.position.x) or math.isnan(self.body.position.y)):
+                    print(f"警告：检测到无效的棋子位置: {self.body.position}")
+                    return
+                
+                x, y = int(self.body.position.x), int(self.body.position.y)
+                
+                if self.chess_type == ChessPieceType.MILITARY_CHESS:
+                    # 军棋（长方形）
+                    pygame.draw.rect(screen, (255, 0, 0), 
+                                   (x - self.radius*1.25, y - self.radius*0.75, 
+                                    self.radius*2.5, self.radius*1.5))
+                elif self.chess_type == ChessPieceType.CHINESE_CHESS:
+                    # 象棋（方形）
+                    pygame.draw.rect(screen, (0, 255, 0), 
+                                   (x - self.radius, y - self.radius, 
+                                    self.radius*2, self.radius*2))
+                elif self.chess_type == ChessPieceType.GO_CHESS:
+                    # 围棋（三角形）
+                    points = [
+                        (x, y - self.radius),
+                        (x - self.radius, y + self.radius),
+                        (x + self.radius, y + self.radius)
+                    ]
+                    pygame.draw.polygon(screen, (0, 0, 255), points)
+        except Exception as e:
+            print(f"绘制棋子时出错: {e}")
 
 # 弹射物（圆珠笔芯）
 class Projectile:
@@ -153,16 +181,47 @@ class ChessModel:
         destruction_percent = fallen_count / initial_total if initial_total > 0 else 1.0
         return destruction_percent > 0.7
         
-    def draw(self, screen, draw_options):
+    def draw(self, screen, draw_options=None):
         """绘制所有棋子"""
         pieces_count = 0
-        for piece in self.pieces:
+        invalid_pieces = []
+        
+        for i, piece in enumerate(self.pieces):
             try:
                 if hasattr(piece, 'draw'):
-                    piece.draw(screen, draw_options)
+                    # 检查棋子位置是否有效
+                    if hasattr(piece, 'body') and hasattr(piece.body, 'position'):
+                        if (math.isnan(piece.body.position.x) or math.isnan(piece.body.position.y)):
+                            print(f"警告：检测到无效的棋子位置，跳过绘制: {piece.body.position}")
+                            invalid_pieces.append(i)
+                            continue
+                    
+                    # 根据参数数量调用不同版本的draw方法
+                    if draw_options is not None:
+                        # 尝试使用两个参数的版本
+                        try:
+                            piece.draw(screen, draw_options)
+                        except TypeError:
+                            # 如果失败，尝试使用单参数版本
+                            piece.draw(screen)
+                    else:
+                        piece.draw(screen)
+                    
                     pieces_count += 1
             except Exception as e:
                 print(f"绘制棋子出错: {e}")
+                invalid_pieces.append(i)
+        
+        # 移除无效的棋子（从后向前移除，避免索引问题）
+        for i in sorted(invalid_pieces, reverse=True):
+            if i < len(self.pieces):
+                print(f"移除无效棋子，索引: {i}")
+                try:
+                    invalid_piece = self.pieces.pop(i)
+                    print(f"已从模型中移除无效棋子")
+                except Exception as e:
+                    print(f"移除无效棋子时出错: {e}")
+        
         if pieces_count < len(self.pieces):
             print(f"警告：只成功绘制了{pieces_count}/{len(self.pieces)}个棋子")
     

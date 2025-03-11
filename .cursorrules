@@ -6,6 +6,8 @@ name = "棋子堡垒Python版"
 description = "基于Python和Pygame的棋子堡垒对战游戏"
 version = "1.0.0"
 maintainers = ["xhdwell2003"]
+# 注意：GitHub Token应存储在环境变量中，不应直接写入代码文件
+# 使用方法：git push https://$GITHUB_TOKEN@github.com/xhdwell2003/chess-fortress-game.git main
 
 # 代码组织结构
 [structure]
