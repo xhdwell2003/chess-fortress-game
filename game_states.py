@@ -314,6 +314,14 @@ class GameManager:
                     if (self.current_player == 2 and 
                         self.screen_width - 120 <= mouse_pos[0] <= self.screen_width - 20 and
                         70 <= mouse_pos[1] <= 100):
+                        # 检查是否放置了象棋
+                        if self.player2_chess_counts[ChessPieceType.CHINESE_CHESS] == 0:
+                            print("必须放置至少一个象棋才能完成搭建")
+                            # 设置提示信息
+                            self.tip_message = "必须放置至少一个象棋才能完成搭建！"
+                            self.tip_timer = pygame.time.get_ticks()
+                            return
+                            
                         # 设置战斗状态
                         self.current_state = GameState.BATTLE
                         self.active_player = 1
@@ -462,6 +470,17 @@ class GameManager:
                 self.selected_chess_type = ChessPieceType.GO_CHESS
                 print("选择围棋")
             elif event.key == pygame.K_s and self.current_state == GameState.BUILDING_PHASE:
+                # 获取当前玩家的棋子计数
+                current_chess_counts = self.player1_chess_counts if self.current_player == 1 else self.player2_chess_counts
+                
+                # 检查是否放置了象棋
+                if current_chess_counts[ChessPieceType.CHINESE_CHESS] == 0:
+                    print("必须放置至少一个象棋才能完成搭建")
+                    # 设置提示信息
+                    self.tip_message = "必须放置至少一个象棋才能完成搭建！"
+                    self.tip_timer = pygame.time.get_ticks()
+                    return
+                
                 # 保存当前模型并切换玩家
                 if self.current_player == 1:
                     print("玩家1完成建造，切换到玩家2")
@@ -503,6 +522,14 @@ class GameManager:
                     print("进入战斗阶段")
             # 添加键盘快捷键进入战斗模式（用于调试）
             elif event.key == pygame.K_b and self.current_state != GameState.BATTLE:
+                # 检查两个玩家是否都放置了象棋
+                if self.player1_chess_counts[ChessPieceType.CHINESE_CHESS] == 0 or self.player2_chess_counts[ChessPieceType.CHINESE_CHESS] == 0:
+                    print("两个玩家都必须放置至少一个象棋才能进入战斗阶段")
+                    # 设置提示信息
+                    self.tip_message = "两个玩家都必须放置至少一个象棋才能进入战斗阶段！"
+                    self.tip_timer = pygame.time.get_ticks()
+                    return
+                    
                 print("使用快捷键强制进入战斗阶段")
                 self.current_state = GameState.BATTLE
                 self.active_player = 1
@@ -1176,10 +1203,11 @@ class GameManager:
             "1. 游戏分为建造和战斗两个阶段",
             "2. 建造阶段：玩家轮流放置棋子，建造自己的堡垒",
             "3. 每个玩家最多可以放置12个棋子",
-            "4. 棋子种类：兵(圆形)、车(方形)、马(三角形)",
-            "5. 战斗阶段：玩家通过调整发射力度攻击对方堡垒",
-            "6. 当任一方堡垒的棋子全部被击落，游戏结束",
-            "7. 剩余棋子较多的玩家获胜"
+            "4. 棋子种类：军棋(长方形)、象棋(方形)、围棋(三角形)",
+            "5. 每个玩家必须放置至少一个象棋才能完成建造",
+            "6. 战斗阶段：玩家通过调整发射力度攻击对方堡垒",
+            "7. 当任一方堡垒的棋子全部被击落，游戏结束",
+            "8. 剩余棋子较多的玩家获胜"
         ]
         
         y_pos = 80
