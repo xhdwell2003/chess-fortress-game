@@ -14,8 +14,9 @@ class ChessPieceType(Enum):
 
 # 棋子基类
 class ChessPiece:
-    def __init__(self, x, y, space, chess_type, radius=20, mass=20.0):
+    def __init__(self, x, y, space, chess_type, radius=20, mass=20.0, player_id=1):
         self.chess_type = chess_type
+        self.player_id = player_id  # 记录棋子属于哪个玩家
         self.position = (x, y)  # 保存初始位置
         self.radius = radius    # 保存半径，用于重建形状
         self.size = radius*2    # 保存尺寸，用于重建形状
@@ -64,6 +65,13 @@ class ChessPiece:
             # 增加碰撞过滤组，确保围棋与地面正确碰撞
             self.shape.collision_type = 3  # 围棋专用碰撞类型
         
+        # 为其他棋子（非围棋）设置玩家相关的碰撞类型
+        else:
+            # 根据玩家ID设置碰撞类型
+            if player_id == 1:
+                self.shape.collision_type = 1  # 玩家1的棋子
+            else:
+                self.shape.collision_type = 2  # 玩家2的棋子
         # 确保棋子是动态的，能够受重力影响
         self.body.body_type = pymunk.Body.DYNAMIC
         
@@ -154,11 +162,12 @@ class Projectile:
         
         # 设置碰撞类型，用于与地面的碰撞处理
         self.shape.collision_type = 4  # 弹射物碰撞类型
+        self.projectile_collision_type = 4  # 保存碰撞类型为属性，方便游戏管理器使用
         
         # 设置碰撞过滤器，确保与地面和棋子正确碰撞
         self.shape.filter = pymunk.ShapeFilter(
             categories=0x8,  # 弹射物类别
-            mask=0x4 | 0x1 | 0x2  # 地面、玩家1和玩家2类别
+            mask=0x4 | 0x1 | 0x2 | 0x3  # 地面、玩家1、玩家2和围棋类别
         )
         
         # 铅笔颜色
@@ -297,6 +306,15 @@ class ChessModel:
         """添加一个棋子到模型中"""
         if piece not in self.pieces:
             self.pieces.append(piece)
+            
+            # 确保棋子知道它属于哪个玩家
+            piece.player_id = self.player_id
+            
+            # 确保碰撞类型正确
+            if hasattr(piece, 'shape') and piece.chess_type != ChessPieceType.GO_CHESS:
+                # 根据玩家ID设置碰撞类型(保留围棋的特殊类型)
+                piece.shape.collision_type = self.player_id
+                print(f"设置棋子碰撞类型为: {piece.shape.collision_type}, 玩家ID: {self.player_id}")
             print(f"棋子已添加到玩家{self.player_id}模型，当前数量: {len(self.pieces)}")
         else:
             print(f"棋子已经存在于玩家{self.player_id}模型中，当前数量: {len(self.pieces)}")
@@ -419,7 +437,7 @@ class ChessModel:
                             angle = piece_data.get('angle', 0)
                             
                         chess_type = ChessPieceType(chess_type_value)
-                        piece = ChessPiece(x, y, space, chess_type)
+                        piece = ChessPiece(x, y, space, chess_type, player_id=model.player_id)
                         piece.body.angle = angle  # 设置旋转角度
                         model.add_piece(piece)
                     except Exception as e:

@@ -29,6 +29,10 @@ class GameManager:
         # 定义碰撞类型
         self.ground_collision_type = 0
         self.projectile_collision_type = 4
+        self.player1_chess_collision_type = 1  # 玩家1的棋子碰撞类型
+        self.player2_chess_collision_type = 2  # 玩家2的棋子碰撞类型
+        self.go_chess_collision_type = 3      # 围棋的碰撞类型
+        print("初始化碰撞类型: 地面=0, 弹射物=4, 玩家1棋子=1, 玩家2棋子=2, 围棋=3")
         
         # 创建地面
         self.create_ground()
@@ -38,6 +42,11 @@ class GameManager:
         self.space.add_collision_handler(3, 0).begin = self.go_chess_ground_collision_handler
         # 为弹射物和地面设置碰撞处理
         self.space.add_collision_handler(self.projectile_collision_type, self.ground_collision_type).begin = self.projectile_ground_collision_handler
+        # 为弹射物和玩家1/2的棋子设置碰撞处理
+        self.space.add_collision_handler(self.projectile_collision_type, self.player1_chess_collision_type).begin = self.projectile_player1_collision_handler 
+        self.space.add_collision_handler(self.projectile_collision_type, self.go_chess_collision_type).begin = self.projectile_go_chess_collision_handler
+        self.space.add_collision_handler(self.projectile_collision_type, self.player2_chess_collision_type).begin = self.projectile_player2_collision_handler
+        
         
         # 玩家模型
         self.player1_model = ChessModel(1)
@@ -178,6 +187,110 @@ class GameManager:
                 projectile_shape.body.angular_velocity = 0
         
         # 返回True表示允许碰撞继续处理
+        return True
+        
+    def projectile_player1_collision_handler(self, arbiter, space, data):
+        """弹射物与玩家1棋子的碰撞处理函数"""
+        print("检测到弹射物与玩家1棋子碰撞")
+        # 获取碰撞的弹射物和棋子
+        projectile_shape = arbiter.shapes[0]
+        chess_shape = arbiter.shapes[1]
+        
+        try:
+            # 找到被碰撞的棋子
+            for piece in self.player1_model.pieces:
+                if hasattr(piece, 'shape') and piece.shape == chess_shape:
+                    # 施加额外冲量，增强碰撞效果
+                    if hasattr(projectile_shape, 'body') and hasattr(projectile_shape.body, 'velocity'):
+                        # 获取弹射物的速度
+                        vel = projectile_shape.body.velocity
+                        # 如果速度足够大，对棋子施加冲量
+                        if vel.length > 10:
+                            # 计算碰撞力度，与弹射物速度成正比
+                            impact = vel.normalized() * min(vel.length * 1.5, 500)
+                            # 对棋子施加冲量
+                            piece.body.apply_impulse_at_world_point(impact, piece.body.position)
+                            print(f"弹射物撞击玩家1棋子，施加冲量: {impact}")
+                    break
+        except Exception as e:
+            print(f"处理弹射物与玩家1棋子碰撞时出错: {e}")
+        
+        # 返回True表示允许碰撞继续处理
+        return True
+
+    def projectile_player2_collision_handler(self, arbiter, space, data):
+        """弹射物与玩家2棋子的碰撞处理函数"""
+        print("检测到弹射物与玩家2棋子碰撞")
+        # 获取碰撞的弹射物和棋子
+        projectile_shape = arbiter.shapes[0]
+        chess_shape = arbiter.shapes[1]
+        
+        # 获取碰撞的弹射物和棋子
+        projectile_shape = arbiter.shapes[0]
+        chess_shape = arbiter.shapes[1]
+        
+        try:
+            # 找到被碰撞的棋子
+            for piece in self.player2_model.pieces:
+                if hasattr(piece, 'shape') and piece.shape == chess_shape:
+                    # 施加额外冲量，增强碰撞效果
+                    if hasattr(projectile_shape, 'body') and hasattr(projectile_shape.body, 'velocity'):
+                        # 获取弹射物的速度
+                        vel = projectile_shape.body.velocity
+                        # 如果速度足够大，对棋子施加冲量
+                        if vel.length > 10:
+                            # 计算碰撞力度，与弹射物速度成正比
+                            impact = vel.normalized() * min(vel.length * 1.5, 500)
+                            # 对棋子施加冲量
+                            piece.body.apply_impulse_at_world_point(impact, piece.body.position)
+                            print(f"弹射物撞击玩家2棋子，施加冲量: {impact}")
+                    break
+        except Exception as e:
+            print(f"处理弹射物与玩家2棋子碰撞时出错: {e}")
+        
+        # 返回True表示允许碰撞继续处理
+        return True
+
+    def projectile_go_chess_collision_handler(self, arbiter, space, data):
+        """弹射物与围棋的碰撞处理函数"""
+        print("检测到弹射物与围棋碰撞")
+        # 获取碰撞的弹射物和棋子
+        projectile_shape = arbiter.shapes[0]
+        go_chess_shape = arbiter.shapes[1]
+        
+        try:
+            # 找到被碰撞的围棋棋子（可能在任一玩家模型中）
+            found_go_chess = False
+            
+            # 先检查玩家1模型
+            for piece in self.player1_model.pieces:
+                if hasattr(piece, 'shape') and piece.shape == go_chess_shape:
+                    # 施加额外冲量，增强碰撞效果
+                    if hasattr(projectile_shape, 'body') and hasattr(projectile_shape.body, 'velocity'):
+                        # 获取弹射物的速度
+                        vel = projectile_shape.body.velocity
+                        # 如果速度足够大，对棋子施加冲量
+                        if vel.length > 10:
+                            # 计算碰撞力度，与弹射物速度成正比
+                            impact = vel.normalized() * min(vel.length * 1.5, 500)
+                            # 对围棋施加冲量（可能需要更大的力度）
+                            piece.body.apply_impulse_at_world_point(impact * 1.2, piece.body.position)
+                            print(f"弹射物撞击玩家1的围棋，施加冲量: {impact}")
+                    found_go_chess = True
+                    break
+            
+            # 如果在玩家1中未找到，检查玩家2模型
+            if not found_go_chess:
+                for piece in self.player2_model.pieces:
+                    if hasattr(piece, 'shape') and piece.shape == go_chess_shape:
+                        if hasattr(projectile_shape, 'body') and hasattr(projectile_shape.body, 'velocity'):
+                            vel = projectile_shape.body.velocity
+                            if vel.length > 10:
+                                impact = vel.normalized() * min(vel.length * 1.5, 500)
+                                piece.body.apply_impulse_at_world_point(impact * 1.2, piece.body.position)
+                                print(f"弹射物撞击玩家2的围棋，施加冲量: {impact}")
+        except Exception as e:
+            print(f"处理弹射物与围棋碰撞时出错: {e}")
         return True
         
     def update(self, dt):
@@ -896,6 +1009,10 @@ class GameManager:
         # 重新设置碰撞处理
         self.space.add_collision_handler(3, 0).begin = self.go_chess_ground_collision_handler
         self.space.add_collision_handler(self.projectile_collision_type, self.ground_collision_type).begin = self.projectile_ground_collision_handler
+        # 重新添加弹射物与玩家棋子的碰撞处理器
+        self.space.add_collision_handler(self.projectile_collision_type, self.player1_chess_collision_type).begin = self.projectile_player1_collision_handler
+        self.space.add_collision_handler(self.projectile_collision_type, self.player2_chess_collision_type).begin = self.projectile_player2_collision_handler
+        self.space.add_collision_handler(self.projectile_collision_type, self.go_chess_collision_type).begin = self.projectile_go_chess_collision_handler
         
         # 重新创建地面
         self.create_ground()
@@ -1001,7 +1118,9 @@ class GameManager:
                         piece.body.position = saved_pos
                         piece.shape = pymunk.Poly(piece.body, triangle_vertices)
                         piece.shape.collision_type = 3  # 围棋特殊碰撞类型
-                    
+                    else:
+                        # 对于非围棋棋子，设置对应玩家的碰撞类型
+                        piece.shape.collision_type = 1  # 玩家1的碰撞类型
                     # 设置物理属性
                     piece.shape.friction = 0.7
                     piece.shape.elasticity = 0.3
@@ -1009,8 +1128,10 @@ class GameManager:
                     # 设置碰撞过滤器，使所有棋子都能相互碰撞
                     piece.shape.filter = pymunk.ShapeFilter(
                         categories=0x1,  # 玩家1类别
-                        mask=0x4 | 0x1 | 0x2  # 地面、玩家1和玩家2类别
+                        mask=0x4 | 0x1 | 0x2 | 0x3 | 0x8  # 地面、玩家1、玩家2、围棋类别和弹射物
                     )
+                    # 明确打印碰撞类型
+                    print(f"玩家1棋子 {i} ({piece.chess_type.name}) 碰撞类型设为: {piece.shape.collision_type}, 类别掩码: {piece.shape.filter.mask}")
                     
                     # 添加到物理空间
                     self.space.add(piece.body, piece.shape)
@@ -1026,7 +1147,7 @@ class GameManager:
                     # 恢复碰撞过滤器，使所有棋子都能相互碰撞
                     piece.shape.filter = pymunk.ShapeFilter(
                         categories=0x1,  # 玩家1类别
-                        mask=0x4 | 0x1 | 0x2  # 地面、玩家1和玩家2类别
+                        mask=0x4 | 0x1 | 0x2 | 0x3 | 0x8  # 地面、玩家1、玩家2、围棋类别和弹射物
                     )
                     # 将玩家1的棋子恢复为动态
                     piece.body.body_type = pymunk.Body.DYNAMIC
@@ -1036,7 +1157,7 @@ class GameManager:
             if hasattr(piece, 'shape'):
                 piece.shape.filter = pymunk.ShapeFilter(
                     categories=0x2,  # 玩家2类别
-                    mask=0x4 | 0x1 | 0x2  # 地面、玩家1和玩家2类别
+                    mask=0x4 | 0x1 | 0x2 | 0x3 | 0x8  # 地面、玩家1、玩家2、围棋类别和弹射物
                 )
         
         # 清除任何现有的弹射物
