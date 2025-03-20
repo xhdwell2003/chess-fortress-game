@@ -59,6 +59,9 @@ class GameManager:
         self.dragging = False
         self.drag_piece = None
         self.drag_offset = (0, 0)
+        
+        # 弹射物状态标记
+        self.projectile_placed = False
         self.is_dragging_existing_piece = False
         
         # 游戏胜利者
@@ -344,50 +347,50 @@ class GameManager:
                 elif self.current_state == GameState.BATTLE:
                     # 检查是否已经有弹射物
                     if not self.projectile:
-                        # 获取鼠标位置
-                        mouse_pos = pygame.mouse.get_pos()
+                         # 获取鼠标位置
+                         mouse_pos = pygame.mouse.get_pos()
                         
-                        # 确保鼠标位置在屏幕范围内
-                        x = max(30, min(mouse_pos[0], self.screen_width - 30))
-                        y = max(30, min(mouse_pos[1], self.screen_height - 100))
-                        
-                        # 创建铅笔弹射物在鼠标点击位置
-                        self.projectile = Projectile(x, y, self.space)
-                        print(f"玩家{self.active_player}添加了铅笔弹射物")
-                        
-                        # 开始充能
-                        self.charging = True
-                        self.shoot_strength = 0
-                        print(f"玩家{self.active_player}开始充能")
+                         # 确保鼠标位置在屏幕范围内
+                         x = max(30, min(mouse_pos[0], self.screen_width - 30))
+                         y = max(30, min(mouse_pos[1], self.screen_height - 100))
+                         
+                         # 创建铅笔弹射物在鼠标点击位置
+                         self.projectile = Projectile(x, y, self.space)
+                         # 设置为已放置但未开始充能
+                         self.projectile_placed = True
+                         print(f"玩家{self.active_player}添加了铅笔弹射物")
                     else:
-                        # 检查弹射物是否有效
-                        if (hasattr(self.projectile, 'body') and 
-                            hasattr(self.projectile.body, 'position') and 
-                            not math.isnan(self.projectile.body.position.x) and 
-                            not math.isnan(self.projectile.body.position.y)):
-                            # 如果弹射物有效，开始充能
-                            self.charging = True
-                            self.shoot_strength = 0
-                            print(f"玩家{self.active_player}开始充能")
+                        # 如果已经放置了弹射物但尚未开始充能
+                        if self.projectile_placed and not self.charging:
+                            # 检查弹射物是否有效
+                            if (hasattr(self.projectile, 'body') and 
+                                hasattr(self.projectile.body, 'position') and 
+                                not math.isnan(self.projectile.body.position.x) and 
+                                not math.isnan(self.projectile.body.position.y)):
+                                # 如果弹射物有效，开始充能
+                                self.charging = True
+                                self.shoot_strength = 0
+                                print(f"玩家{self.active_player}开始充能")
+                            else:
+                                # 如果弹射物无效，重置并创建新的
+                                print("检测到无效弹射物，重新创建")
+                                self.projectile = None
+                                self.projectile_placed = False
+                                
+                                # 获取鼠标位置
+                                mouse_pos = pygame.mouse.get_pos()
+                                
+                                # 确保鼠标位置在屏幕范围内
+                                x = max(30, min(mouse_pos[0], self.screen_width - 30))
+                                y = max(30, min(mouse_pos[1], self.screen_height - 100))
+                                
+                                # 创建新的铅笔弹射物
+                                self.projectile = Projectile(x, y, self.space)
+                                self.projectile_placed = True
+                                print(f"玩家{self.active_player}添加了新的铅笔弹射物")
                         else:
-                            # 如果弹射物无效，重置并创建新的
-                            print("检测到无效弹射物，重新创建")
-                            self.projectile = None
-                            
-                            # 获取鼠标位置
-                            mouse_pos = pygame.mouse.get_pos()
-                            
-                            # 确保鼠标位置在屏幕范围内
-                            x = max(30, min(mouse_pos[0], self.screen_width - 30))
-                            y = max(30, min(mouse_pos[1], self.screen_height - 100))
-                            
-                            # 创建新的铅笔弹射物
-                            self.projectile = Projectile(x, y, self.space)
-                            print(f"玩家{self.active_player}添加了新的铅笔弹射物")
-                            
-                            # 开始充能
-                            self.charging = True
-                            self.shoot_strength = 0
+                            # 如果点击时弹射物已经在充能状态，不做任何处理
+                            pass
                     
                 # 如果是游戏结束状态，检查是否点击了返回主菜单
                 elif self.current_state == GameState.GAME_OVER:
@@ -407,6 +410,7 @@ class GameManager:
                     self.charging = False
                     mouse_pos = pygame.mouse.get_pos()
                     
+                    # 重置弹射物放置状态
                     # 计算发射方向
                     if self.projectile and hasattr(self.projectile, 'body') and hasattr(self.projectile.body, 'position'):
                         try:
@@ -438,6 +442,8 @@ class GameManager:
                             
                             # 切换玩家
                             self.active_player = 2 if self.active_player == 1 else 1
+                            # 重置弹射物状态
+                            self.projectile_placed = False
                         except Exception as e:
                             print(f"发射弹射物时出错: {e}")
                             # 不重置弹射物，只打印错误
@@ -450,6 +456,7 @@ class GameManager:
                         
                         # 创建新的铅笔弹射物
                         self.projectile = Projectile(x, y, self.space)
+                        self.projectile_placed = True
         
         elif event.type == pygame.MOUSEMOTION:
             # 如果正在拖动棋子，更新棋子位置
@@ -754,8 +761,11 @@ class GameManager:
         if not self.projectile:
             hint = self.font.render("点击屏幕添加铅笔弹射物", True, (255, 0, 0))
             screen.blit(hint, (self.screen_width // 2 - hint.get_width() // 2, 40))
+        elif self.projectile_placed and not self.charging:
+            hint = self.font.render("再次点击铅笔开始充能", True, (255, 0, 0))
+            screen.blit(hint, (self.screen_width // 2 - hint.get_width() // 2, 40))
         elif not self.charging:
-            hint = self.font.render("点击铅笔开始充能", True, (255, 0, 0))
+            hint = self.font.render("放置铅笔后，点击铅笔开始充能", True, (255, 0, 0))
             screen.blit(hint, (self.screen_width // 2 - hint.get_width() // 2, 40))
         else:
             guide_text1 = self.font.render("松开鼠标发射铅笔", True, (0, 0, 255))
@@ -862,6 +872,7 @@ class GameManager:
         self.dragging = False
         self.drag_piece = None
         self.drag_offset = (0, 0)
+        self.projectile_placed = False
         self.is_dragging_existing_piece = False
         
         # 重置棋子计数
@@ -986,6 +997,7 @@ class GameManager:
         # 清除任何现有的弹射物
         self.projectile = None
         self.charging = False
+        self.projectile_placed = False
         self.shoot_strength = 0
         print("战斗阶段准备完毕")
 
