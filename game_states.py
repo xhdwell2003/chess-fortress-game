@@ -23,7 +23,7 @@ class GameManager:
         
         # 初始化物理空间
         self.space = pymunk.Space()
-        self.space.gravity = (0, 200)  # 进一步增加重力
+        self.space.gravity = (0, 400)  # 增强重力效果，使笔芯运动更加真实
         self.space.damping = 0.85  # 进一步减小阻尼，使物体运动更流畅
         
         # 定义碰撞类型
@@ -890,7 +890,7 @@ class GameManager:
         """重置游戏到初始状态"""
         # 清除所有物理对象
         self.space = pymunk.Space()
-        self.space.gravity = (0, 200)  # 进一步增加重力
+        self.space.gravity = (0, 400)  # 增强重力效果，使笔芯运动更加真实
         self.space.damping = 0.85  # 进一步减小阻尼，使物体运动更流畅
         
         # 重新设置碰撞处理
