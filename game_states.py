@@ -62,6 +62,8 @@ class GameManager:
         
         # 弹射物状态标记
         self.projectile_placed = False
+        self.projectile_fired = False    # 标记弹射物已发射但尚未切换玩家
+        self.ready_to_switch_player = False  # 标记弹射物已停止运动，可以切换玩家
         self.is_dragging_existing_piece = False
         
         # 游戏胜利者
@@ -211,6 +213,12 @@ class GameManager:
                     if velocity_length < 5 and self.projectile.body.body_type == pymunk.Body.DYNAMIC:
                         self.projectile.body.velocity = pymunk.Vec2d(0, 0)
                         self.projectile.body.angular_velocity = 0
+                        
+                        # 如果弹射物已发射并且停止移动，标记可以切换玩家
+                        if self.projectile_fired and not self.ready_to_switch_player:
+                            self.ready_to_switch_player = True
+                            print("弹射物停止运动，可以切换玩家")
+
             except Exception as e:
                 # 如果处理弹射物速度时出错，打印错误但不重置弹射物
                 print(f"处理弹射物速度时出错: {e}")
@@ -366,6 +374,7 @@ class GameManager:
                             if (hasattr(self.projectile, 'body') and 
                                 hasattr(self.projectile.body, 'position') and 
                                 not math.isnan(self.projectile.body.position.x) and 
+                                not self.projectile_fired and
                                 not math.isnan(self.projectile.body.position.y)):
                                 # 如果弹射物有效，开始充能
                                 self.charging = True
@@ -391,6 +400,27 @@ class GameManager:
                         else:
                             # 如果点击时弹射物已经在充能状态，不做任何处理
                             pass
+                    
+                    # 检查是否点击"切换玩家"按钮
+                    if (self.projectile_fired and self.ready_to_switch_player and
+                        self.screen_width // 2 - 80 <= mouse_pos[0] <= self.screen_width // 2 + 80 and
+                        100 <= mouse_pos[1] <= 140):
+                        # 切换玩家
+                        self.active_player = 2 if self.active_player == 1 else 1
+                        
+                        # 移除当前弹射物
+                        if self.projectile and hasattr(self.projectile, 'shape') and self.projectile.shape in self.space.shapes:
+                            self.space.remove(self.projectile.shape)
+                        if self.projectile and hasattr(self.projectile, 'body') and self.projectile.body in self.space.bodies:
+                            self.space.remove(self.projectile.body)
+                        
+                        # 重置弹射物相关状态
+                        self.projectile = None
+                        self.projectile_placed = False
+                        self.projectile_fired = False
+                        self.ready_to_switch_player = False
+                        self.charging = False
+                        self.shoot_strength = 0
                     
                 # 如果是游戏结束状态，检查是否点击了返回主菜单
                 elif self.current_state == GameState.GAME_OVER:
@@ -424,31 +454,29 @@ class GameManager:
                                 
                             angle = math.atan2(dy, dx)
                             
-                            # 发射方向向量
-                            dir_x = math.cos(angle)
-                            dir_y = math.sin(angle)
-                            
                             # 应用冲量发射弹射物
                             strength = min(self.shoot_strength, self.max_strength)
                             if strength <= 0:
                                 strength = 500  # 确保有最小强度
                                 
-                            # 确保弹射物是动态的
-                            if self.projectile.body.body_type != pymunk.Body.DYNAMIC:
-                                self.projectile.body.body_type = pymunk.Body.DYNAMIC
-                                
-                            self.projectile.apply_impulse(pymunk.Vec2d(dir_x, dir_y), strength)
-                            print(f"发射弹射物，方向: ({dir_x:.2f}, {dir_y:.2f})，强度: {strength}")
+                            # 直接使用dx和dy作为方向向量，保持准确的射击方向
+                            direction_vector = pymunk.Vec2d(dx, dy)
                             
-                            # 切换玩家
-                            self.active_player = 2 if self.active_player == 1 else 1
-                            # 重置弹射物状态
-                            self.projectile_placed = False
+                            # 设置铅笔的角度与运动方向一致
+                            self.projectile.body.angle = angle
+                                
+                            self.projectile.apply_impulse(direction_vector, strength)
+                            # 使用direction_vector而不是已删除的dir_x和dir_y
+                            print(f"发射弹射物，方向: (dx={dx:.2f}, dy={dy:.2f})，强度: {strength}")
+                            
+                            # 标记弹射物已发射
+                            self.projectile_fired = True
+                            print(f"玩家{self.active_player}已发射弹射物，等待结束")
                         except Exception as e:
                             print(f"发射弹射物时出错: {e}")
                             # 不重置弹射物，只打印错误
-                    else:
-                        # 如果弹射物无效，重置状态并创建新的
+                    elif self.projectile and not self.projectile_fired:  # 仅当弹射物存在但未发射且有问题时执行
+                        # 如果弹射物无效（但未发射），重置状态并创建新的
                         print("弹射物无效，创建新的弹射物")
                         # 获取鼠标位置
                         x = max(30, min(mouse_pos[0], self.screen_width - 30))
@@ -765,6 +793,8 @@ class GameManager:
             hint = self.font.render("再次点击铅笔开始充能", True, (255, 0, 0))
             screen.blit(hint, (self.screen_width // 2 - hint.get_width() // 2, 40))
         elif not self.charging:
+            if self.projectile_fired and self.ready_to_switch_player:
+                pass  # 跳过提示，因为下面会显示"切换玩家"按钮
             hint = self.font.render("放置铅笔后，点击铅笔开始充能", True, (255, 0, 0))
             screen.blit(hint, (self.screen_width // 2 - hint.get_width() // 2, 40))
         else:
@@ -773,6 +803,17 @@ class GameManager:
             
             guide_text2 = self.font.render("玩家轮流攻击，直到一方模型散架", True, (0, 0, 255))
             screen.blit(guide_text2, (self.screen_width // 2 - guide_text2.get_width() // 2, 60))
+        
+        # 如果弹射物已发射且已停止，显示"切换玩家"按钮
+        if self.projectile_fired and self.ready_to_switch_player:
+            # 绘制"切换玩家"按钮
+            pygame.draw.rect(screen, (100, 200, 100), (self.screen_width // 2 - 80, 100, 160, 40))
+            switch_text = self.font.render("切换玩家", True, (0, 0, 0))
+            screen.blit(switch_text, (self.screen_width // 2 - switch_text.get_width() // 2, 110))
+            
+            # 添加提示文本
+            info_text = self.small_font.render(f"点击按钮切换到玩家{2 if self.active_player == 1 else 1}", True, (0, 0, 0))
+            screen.blit(info_text, (self.screen_width // 2 - info_text.get_width() // 2, 150))
         
         # 绘制两个玩家的模型
         for piece in self.player1_model.pieces:
@@ -872,6 +913,10 @@ class GameManager:
         self.dragging = False
         self.drag_piece = None
         self.drag_offset = (0, 0)
+        
+        # 重置弹射物状态
+        self.projectile_fired = False
+        self.ready_to_switch_player = False
         self.projectile_placed = False
         self.is_dragging_existing_piece = False
         
@@ -997,6 +1042,9 @@ class GameManager:
         # 清除任何现有的弹射物
         self.projectile = None
         self.charging = False
+        # 重置弹射物状态
+        self.projectile_fired = False
+        self.ready_to_switch_player = False
         self.projectile_placed = False
         self.shoot_strength = 0
         print("战斗阶段准备完毕")

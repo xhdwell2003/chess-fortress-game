@@ -188,10 +188,34 @@ class Projectile:
                 # 标准化方向向量
                 direction = direction.normalized()
             
-            # 设置铅笔的角度，使笔尖朝向发射方向
+            # 设置铅笔的角度与发射方向一致
             angle = math.atan2(direction.y, direction.x)
             self.body.angle = angle
             
+            # 使用world_point而不是local_point来施加冲量，确保方向正确
+            self.body.apply_impulse_at_world_point(direction * strength, self.body.position)
+            print(f"成功发射弹射物，方向: ({direction.x:.2f}, {direction.y:.2f})，强度: {strength}")
+        except Exception as e:
+            print(f"施加冲量时出错: {e}")
+        
+    def apply_impulse_old(self, direction, strength):
+        """旧的施加冲量方法（保留用于参考）"""
+        try:
+            # 确保弹射物是动态的
+            if self.body.body_type != pymunk.Body.DYNAMIC:
+                self.body.body_type = pymunk.Body.DYNAMIC
+            
+            # 检查方向向量是否有效
+            if math.isnan(direction.x) or math.isnan(direction.y):
+                print("警告：发射方向包含NaN值，使用默认方向")
+                direction = pymunk.Vec2d(1, 0)  # 默认向右发射
+            else:
+                # 标准化方向向量
+                direction = direction.normalized()
+            
+            # 设置铅笔的角度，使笔尖朝向发射方向
+            angle = math.atan2(direction.y, direction.x)
+            self.body.angle = angle
             # 确保强度有效
             if math.isnan(strength) or strength <= 0:
                 print("警告：发射强度无效，使用默认强度")
