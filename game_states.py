@@ -336,11 +336,24 @@ class GameManager:
         
         # 在战斗状态下检查胜负
         if self.current_state == GameState.BATTLE:
+            # 检查双方象棋是否孤立（不与本方其他棋子接触）
+            player1_chinese_chess_isolated = self.player1_model.is_chinese_chess_isolated(self.space)
+            player2_chinese_chess_isolated = self.player2_model.is_chinese_chess_isolated(self.space)
+            
+            # 根据新规则：当象棋与本方其他棋子都不接触时，对方获胜
+            if player1_chinese_chess_isolated:
+                print("玩家1的象棋与其他棋子不接触，玩家2获胜")
+                self.current_state = GameState.GAME_OVER
+                self.winner = 2
+            elif player2_chinese_chess_isolated:
+                print("玩家2的象棋与其他棋子不接触，玩家1获胜")
+                self.current_state = GameState.GAME_OVER
+                self.winner = 1
             if self.player1_model.is_destroyed():
                 print("玩家1模型被摧毁，玩家2获胜")
                 self.current_state = GameState.GAME_OVER
                 self.winner = 2
-            elif self.player2_model.is_destroyed():
+            elif self.player2_model.is_destroyed() and not player2_chinese_chess_isolated:
                 print("玩家2模型被摧毁，玩家1获胜")
                 self.current_state = GameState.GAME_OVER
                 self.winner = 1
@@ -982,7 +995,9 @@ class GameManager:
             result_text = "玩家2的棋子堡垒坚固稳定，成功击溃了对手的防线!"
             
         result = self.font.render(result_text, True, (255, 255, 255))
-        screen.blit(result, (self.screen_width // 2 - result.get_width() // 2, self.screen_height // 2 - 20))
+        screen.blit(result, (self.screen_width // 2 - result.get_width() // 2, 
+                             self.screen_height // 2 - 20))
+        
         
         # 绘制返回主菜单按钮
         pygame.draw.rect(screen, (100, 100, 255), (self.screen_width // 2 - 80, self.screen_height // 2 + 30, 160, 40))
@@ -1100,15 +1115,15 @@ class GameManager:
                     if piece.chess_type == ChessPieceType.MILITARY_CHESS:
                         # 军棋（长方形）
                         width, height = piece.radius*2.5, piece.radius*1.5
-                        moment = pymunk.moment_for_box(1, (width, height))
-                        piece.body = pymunk.Body(1, moment)
+                        moment = pymunk.moment_for_box(20.0, (width, height))
+                        piece.body = pymunk.Body(20.0, moment)
                         piece.body.position = saved_pos
                         piece.shape = pymunk.Poly.create_box(piece.body, (width, height))
                     elif piece.chess_type == ChessPieceType.CHINESE_CHESS:
                         # 象棋（方形）
                         size = piece.radius*2
-                        moment = pymunk.moment_for_box(1, (size, size))
-                        piece.body = pymunk.Body(1, moment)
+                        moment = pymunk.moment_for_box(20.0, (size, size))
+                        piece.body = pymunk.Body(20.0, moment)
                         piece.body.position = saved_pos
                         piece.shape = pymunk.Poly.create_box(piece.body, (size, size))
                     elif piece.chess_type == ChessPieceType.GO_CHESS:
@@ -1118,8 +1133,8 @@ class GameManager:
                             (piece.radius*1.2, piece.radius),
                             (0, -piece.radius)
                         ]
-                        moment = pymunk.moment_for_poly(1, triangle_vertices, (0, 0))
-                        piece.body = pymunk.Body(1, moment)
+                        moment = pymunk.moment_for_poly(20.0, triangle_vertices, (0, 0))
+                        piece.body = pymunk.Body(20.0, moment)
                         piece.body.position = saved_pos
                         piece.shape = pymunk.Poly(piece.body, triangle_vertices)
                         piece.shape.collision_type = 3  # 围棋特殊碰撞类型
@@ -1183,6 +1198,10 @@ class GameManager:
                         categories=0x2,  # 玩家2类别
                         mask=0x4 | 0x1 | 0x2 | 0x3 | 0x8  # 地面、玩家1、玩家2、围棋类别和弹射物
                     )
+                    
+                    # 统一设置与玩家1相同的物理属性
+                    piece.shape.friction = 0.7  # 与玩家1相同的摩擦力
+                    piece.shape.elasticity = 0.2  # 与玩家1相同的弹性
                     
                     # 确保玩家2的棋子是动态的
                     piece.body.body_type = pymunk.Body.DYNAMIC

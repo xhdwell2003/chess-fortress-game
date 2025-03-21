@@ -330,7 +330,11 @@ class ChessModel:
         """检查模型是否被完全摧毁（所有棋子都散落在地面以上一定高度）"""
         if not self.pieces:  # 如果没有棋子，认为模型已摧毁
             return True
+    
+        return self.get_destruction_percentage() > 0.7
             
+    def get_destruction_percentage(self):
+        """计算模型被摧毁的百分比"""
         # 计算初始完好的棋子数量
         ground_y = 500  # 假设500是地面位置
         initial_total = len(self.pieces)
@@ -345,10 +349,61 @@ class ChessModel:
                 # 如果棋子没有正确的物理属性，视为已掉落
                 fallen_count += 1
                 
-        # 如果超过70%的棋子已散落，则认为模型已被摧毁
-        destruction_percent = fallen_count / initial_total if initial_total > 0 else 1.0
-        return destruction_percent > 0.7
+        # 返回散落的棋子比例
+        return fallen_count / initial_total if initial_total > 0 else 1.0
+    
+    def is_chinese_chess_isolated(self, space):
+        """检查象棋是否与本方其他棋子都不接触
         
+        Args:
+            space: pymunk物理空间，用于检测碰撞
+            
+        Returns:
+            bool: 如果象棋与其他本方棋子都不接触，返回True；否则返回False
+        """
+        # 首先找到象棋棋子
+        chinese_chess = None
+        other_pieces = []
+        
+        # 计算初始完好的棋子数量
+        ground_y = 500  # 假设500是地面位置
+        initial_total = len(self.pieces)
+        fallen_count = 0
+        
+        for piece in self.pieces:
+            # 检查棋子是否已掉落或靠近地面
+            if hasattr(piece, 'chess_type'):
+                if piece.chess_type == ChessPieceType.CHINESE_CHESS:
+                    chinese_chess = piece
+                else:
+                    other_pieces.append(piece)
+            else:
+                print(f"警告：棋子没有chess_type属性")
+        
+        # 如果没有找到象棋，则认为没有象棋或者象棋已经掉落（按照规则应该已经输了）
+        if not chinese_chess or not hasattr(chinese_chess, 'shape'):
+            print(f"玩家{self.player_id}的象棋不存在或无效")
+            return True
+            
+        # 如果没有其他棋子，象棋肯定是孤立的
+        if not other_pieces:
+            print(f"玩家{self.player_id}没有非象棋棋子，象棋被认为是孤立的")
+            return True
+            
+        # 检查象棋是否与其他本方棋子接触
+        for other in other_pieces:
+            if hasattr(other, 'shape') and hasattr(other.body, 'position'):
+                # 使用pymunk的碰撞检测功能来判断两个棋子是否接触
+                if space.shape_query(chinese_chess.shape):
+                    query_result = space.shape_query(chinese_chess.shape)
+                    for contact in query_result:
+                        if contact.shape == other.shape:
+                            print(f"玩家{self.player_id}的象棋与其他棋子接触")
+                            return False  # 有接触，不孤立
+        
+        print(f"玩家{self.player_id}的象棋孤立")
+        return True  # 没有接触，孤立
+
     def draw(self, screen, draw_options=None):
         """绘制所有棋子"""
         pieces_count = 0
