@@ -221,15 +221,12 @@ class GameManager:
     def projectile_player2_collision_handler(self, arbiter, space, data):
         """弹射物与玩家2棋子的碰撞处理函数"""
         print("检测到弹射物与玩家2棋子碰撞")
-        # 获取碰撞的弹射物和棋子
-        projectile_shape = arbiter.shapes[0]
-        chess_shape = arbiter.shapes[1]
-        
-        # 获取碰撞的弹射物和棋子
+        # 获取碰撞的弹射物和棋子 
         projectile_shape = arbiter.shapes[0]
         chess_shape = arbiter.shapes[1]
         
         try:
+            print(f"正在处理弹射物与玩家2棋子碰撞，弹射物类型: {projectile_shape.collision_type}, 棋子类型: {chess_shape.collision_type}")
             # 找到被碰撞的棋子
             for piece in self.player2_model.pieces:
                 if hasattr(piece, 'shape') and piece.shape == chess_shape:
@@ -238,10 +235,11 @@ class GameManager:
                         # 获取弹射物的速度
                         vel = projectile_shape.body.velocity
                         # 如果速度足够大，对棋子施加冲量
-                        if vel.length > 10:
+                        print(f"弹射物与玩家2棋子碰撞，速度: {vel.length}")
+                        
+                        if vel.length > 5:  # 降低阈值，确保小速度也有效果
                             # 计算碰撞力度，与弹射物速度成正比
                             impact = vel.normalized() * min(vel.length * 1.5, 500)
-                            # 对棋子施加冲量
                             piece.body.apply_impulse_at_world_point(impact, piece.body.position)
                             print(f"弹射物撞击玩家2棋子，施加冲量: {impact}")
                     break
@@ -1006,10 +1004,10 @@ class GameManager:
         self.space.gravity = (0, 400)  # 增强重力效果，使笔芯运动更加真实
         self.space.damping = 0.85  # 进一步减小阻尼，使物体运动更流畅
         
-        # 重新设置碰撞处理
+        # 重新设置碰撞处理器
         self.space.add_collision_handler(3, 0).begin = self.go_chess_ground_collision_handler
         self.space.add_collision_handler(self.projectile_collision_type, self.ground_collision_type).begin = self.projectile_ground_collision_handler
-        # 重新添加弹射物与玩家棋子的碰撞处理器
+        # 重新添加弹射物与各类棋子的碰撞处理器
         self.space.add_collision_handler(self.projectile_collision_type, self.player1_chess_collision_type).begin = self.projectile_player1_collision_handler
         self.space.add_collision_handler(self.projectile_collision_type, self.player2_chess_collision_type).begin = self.projectile_player2_collision_handler
         self.space.add_collision_handler(self.projectile_collision_type, self.go_chess_collision_type).begin = self.projectile_go_chess_collision_handler
@@ -1074,16 +1072,23 @@ class GameManager:
             # 使用保存的位置重新创建棋子
             print(f"使用保存的位置重新创建玩家1的棋子，数量: {len(self.player1_positions_saved)}")
             
+            # 显示当前玩家1模型信息，方便调试
+            for i, piece in enumerate(self.player1_model.pieces):
+                if hasattr(piece, 'chess_type'):
+                    print(f"[重建前] 玩家1棋子 {i}，类型: {piece.chess_type.name}，ID: {piece.player_id}")
+            
             # 确保玩家1的棋子数量与保存的位置数量一致
             if len(self.player1_model.pieces) != len(self.player1_positions_saved):
                 print(f"警告：玩家1棋子数量({len(self.player1_model.pieces)})与保存的位置数量({len(self.player1_positions_saved)})不一致")
             
             # 清除所有现有的物理对象
+            print("[调试] 开始清除玩家1的物理对象")
             for piece in self.player1_model.pieces:
                 if hasattr(piece, 'shape') and piece.shape in self.space.shapes:
                     self.space.remove(piece.shape)
                 if hasattr(piece, 'body') and piece.body in self.space.bodies:
                     self.space.remove(piece.body)
+            print("[调试] 完成清除玩家1的物理对象")
             
             # 使用保存的位置重新创建物理对象
             for i, piece in enumerate(self.player1_model.pieces):
@@ -1119,8 +1124,12 @@ class GameManager:
                         piece.shape = pymunk.Poly(piece.body, triangle_vertices)
                         piece.shape.collision_type = 3  # 围棋特殊碰撞类型
                     else:
-                        # 对于非围棋棋子，设置对应玩家的碰撞类型
+                        # 对于非围棋棋子，设置玩家1的碰撞类型
                         piece.shape.collision_type = 1  # 玩家1的碰撞类型
+                    
+                    # 明确设置玩家ID，确保ChessModel.add_piece能正确处理
+                    piece.player_id = 1
+                    
                     # 设置物理属性
                     piece.shape.friction = 0.7
                     piece.shape.elasticity = 0.3
@@ -1152,14 +1161,39 @@ class GameManager:
                     # 将玩家1的棋子恢复为动态
                     piece.body.body_type = pymunk.Body.DYNAMIC
         
-        # 确保玩家2的棋子也能与玩家1的棋子碰撞
-        for piece in self.player2_model.pieces:
+        # 确保玩家2的棋子正确设置碰撞类型和物理属性
+        print(f"玩家2棋子处理开始，总数: {len(self.player2_model.pieces)}")
+        for i, piece in enumerate(self.player2_model.pieces):
             if hasattr(piece, 'shape'):
-                piece.shape.filter = pymunk.ShapeFilter(
-                    categories=0x2,  # 玩家2类别
-                    mask=0x4 | 0x1 | 0x2 | 0x3 | 0x8  # 地面、玩家1、玩家2、围棋类别和弹射物
-                )
-        
+                try:
+                    # 首先确保玩家ID正确设置
+                    piece.player_id = 2
+                    
+                    # 确保为围棋类型的棋子设置特殊碰撞类型
+                    if piece.chess_type == ChessPieceType.GO_CHESS:
+                        piece.shape.collision_type = 3  # 围棋特殊碰撞类型
+                        print(f"玩家2围棋碰撞类型设为: {piece.shape.collision_type}")
+                    else:
+                        # 对于非围棋棋子，明确设置为玩家2的碰撞类型
+                        piece.shape.collision_type = 2  # 玩家2的碰撞类型
+                        print(f"玩家2棋子碰撞类型设为: {piece.shape.collision_type}")
+                    
+                    # 重新设置碰撞过滤器，确保能够与弹射物和其他棋子正确碰撞
+                    piece.shape.filter = pymunk.ShapeFilter(
+                        categories=0x2,  # 玩家2类别
+                        mask=0x4 | 0x1 | 0x2 | 0x3 | 0x8  # 地面、玩家1、玩家2、围棋类别和弹射物
+                    )
+                    
+                    # 确保玩家2的棋子是动态的
+                    piece.body.body_type = pymunk.Body.DYNAMIC
+                        
+                    # 调试信息，打印每个棋子的详细信息
+                    print(f"[调试] 玩家2棋子 {i}, 类型: {piece.chess_type.name}, 碰撞类型: {piece.shape.collision_type}, 玩家ID: {piece.player_id}")
+                except Exception as e:
+                    print(f"处理玩家2棋子 {i} 时出错: {e}")
+                    import traceback
+                    traceback.print_exc()
+                    
         # 清除任何现有的弹射物
         self.projectile = None
         self.charging = False
@@ -1237,6 +1271,12 @@ class GameManager:
             
             # 创建一个新棋子
             self.drag_piece = ChessPiece(x, y, self.space, self.selected_chess_type)
+            
+            # 明确设置玩家ID
+            self.drag_piece.player_id = self.current_player
+            
+            # 打印调试信息
+            print(f"创建新棋子，类型: {self.selected_chess_type.name}, 玩家ID: {self.current_player}")
             
             # 设置拖动偏移
             self.drag_offset = (0, 0)
@@ -1349,6 +1389,9 @@ class GameManager:
                 current_chess_counts[self.selected_chess_type] += 1
                 
                 print(f"添加新棋子到玩家{self.current_player}模型，当前模型棋子数: {len(current_model.pieces)}")
+                
+                # 输出调试信息
+                print(f"新棋子碰撞类型: {new_piece.shape.collision_type}, 玩家ID: {new_piece.player_id}")
                 
                 # 移除拖动中的临时棋子
                 try:

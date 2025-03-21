@@ -312,8 +312,15 @@ class ChessModel:
             
             # 确保碰撞类型正确
             if hasattr(piece, 'shape') and piece.chess_type != ChessPieceType.GO_CHESS:
-                # 根据玩家ID设置碰撞类型(保留围棋的特殊类型)
-                piece.shape.collision_type = self.player_id
+                # 根据玩家ID设置对应的碰撞类型(保留围棋的特殊类型)
+                if self.player_id == 1:
+                    piece.shape.collision_type = 1  # 玩家1的棋子
+                else:
+                    piece.shape.collision_type = 2  # 玩家2的棋子
+                    
+                # 打印详细信息以便调试
+                if piece.chess_type == ChessPieceType.GO_CHESS:
+                    print(f"围棋碰撞类型保持为: {piece.shape.collision_type}")
                 print(f"设置棋子碰撞类型为: {piece.shape.collision_type}, 玩家ID: {self.player_id}")
             print(f"棋子已添加到玩家{self.player_id}模型，当前数量: {len(self.pieces)}")
         else:
@@ -414,7 +421,7 @@ class ChessModel:
     @classmethod
     def load(cls, filename, space):
         """加载模型状态"""
-        try:
+        try: 
             if not os.path.exists(f"{filename}.model"):
                 print(f"无法找到模型文件: {filename}.model")
                 return None
@@ -423,6 +430,9 @@ class ChessModel:
                 model_data = pickle.load(f)
                 
             model = ChessModel(model_data['player_id'])
+            
+            # 打印加载的模型信息
+            print(f"从{filename}.model加载模型，玩家ID: {model.player_id}")
             
             if 'pieces' in model_data and len(model_data['pieces']) > 0:
                 for piece_data in model_data['pieces']:
@@ -435,9 +445,21 @@ class ChessModel:
                             x, y = piece_data['position']
                             chess_type_value = piece_data['chess_type']
                             angle = piece_data.get('angle', 0)
-                            
+                         
                         chess_type = ChessPieceType(chess_type_value)
-                        piece = ChessPiece(x, y, space, chess_type, player_id=model.player_id)
+                        
+                        # 明确使用模型的player_id创建棋子
+                        player_id = model.player_id
+                        piece = ChessPiece(x, y, space, chess_type, player_id=player_id)
+                        
+                        # 直接设置正确的碰撞类型
+                        if chess_type == ChessPieceType.GO_CHESS:
+                            piece.shape.collision_type = 3  # 围棋特殊类型
+                        else:
+                            piece.shape.collision_type = player_id  # 根据玩家ID设置
+                        
+                        # 打印调试信息
+                        print(f"加载棋子: 类型={chess_type.name}, 玩家ID={player_id}, 碰撞类型={piece.shape.collision_type}")
                         piece.body.angle = angle  # 设置旋转角度
                         model.add_piece(piece)
                     except Exception as e:
