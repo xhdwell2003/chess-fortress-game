@@ -78,6 +78,12 @@ class GameManager:
         # 游戏胜利者
         self.winner = None
         
+        # 棋子稳定性相关变量
+        self.pieces_stable = False  # 标记棋子是否处于稳定状态
+        self.stability_timer = 0    # 稳定状态计时器
+        self.stability_check_duration = 2000  # 稳定状态需要持续的时间(毫秒)
+        self.last_victory_check_time = 0  # 上次胜负检查的时间
+        
         # 游戏界面设置
         self.draw_options = pymunk.pygame_util.DrawOptions(pygame.Surface((1, 1)))
         
@@ -294,6 +300,8 @@ class GameManager:
     def update(self, dt):
         """更新游戏状态"""
         # 使用固定的物理步长，避免物理模拟中的不稳定性
+        current_time = pygame.time.get_ticks()
+        
         step_dt = 1/120.0  # 固定步长为120FPS
         steps = int(dt / step_dt) + 1
         for _ in range(steps):
@@ -335,32 +343,96 @@ class GameManager:
                 print(f"处理弹射物速度时出错: {e}")
         
         # 在战斗状态下检查胜负
-        if self.current_state == GameState.BATTLE:
-            # 检查双方象棋是否孤立（不与本方其他棋子接触）
-            player1_chinese_chess_isolated = self.player1_model.is_chinese_chess_isolated(self.space)
-            player2_chinese_chess_isolated = self.player2_model.is_chinese_chess_isolated(self.space)
+        if self.current_state == GameState.BATTLE and not self.projectile_fired:
+            # 检查所有棋子是否处于稳定状态
+            all_stable = self.is_all_pieces_stable()
             
-            # 根据新规则：当象棋与本方其他棋子都不接触时，对方获胜
-            if player1_chinese_chess_isolated:
-                print("玩家1的象棋与其他棋子不接触，玩家2获胜")
-                self.current_state = GameState.GAME_OVER
-                self.winner = 2
-            elif player2_chinese_chess_isolated:
-                print("玩家2的象棋与其他棋子不接触，玩家1获胜")
-                self.current_state = GameState.GAME_OVER
-                self.winner = 1
-            if self.player1_model.is_destroyed():
-                print("玩家1模型被摧毁，玩家2获胜")
-                self.current_state = GameState.GAME_OVER
-                self.winner = 2
-            elif self.player2_model.is_destroyed() and not player2_chinese_chess_isolated:
-                print("玩家2模型被摧毁，玩家1获胜")
-                self.current_state = GameState.GAME_OVER
-                self.winner = 1
+            # 如果所有棋子稳定，开始计时
+            if all_stable and not self.pieces_stable:
+                self.pieces_stable = True
+                self.stability_timer = current_time
+                print("检测到所有棋子处于稳定状态，开始计时...")
+            
+            # 如果棋子又开始运动，重置稳定状态
+            elif not all_stable and self.pieces_stable:
+                self.pieces_stable = False
+                print("检测到棋子开始运动，重置稳定状态")
+            
+            # 如果棋子持续稳定一段时间，执行胜负判断
+            if self.pieces_stable and (current_time - self.stability_timer >= self.stability_check_duration):
+                # 确保不会连续多次调用胜负判断（至少间隔1秒）
+                if current_time - self.last_victory_check_time >= 1000:
+                    self.last_victory_check_time = current_time
+                    print(f"棋子已保持稳定状态 {(current_time - self.stability_timer) / 1000:.1f} 秒，执行胜负判断")
+                    
+                    # 检查双方象棋是否孤立（不与本方其他棋子接触）
+                    player1_chinese_chess_isolated = self.player1_model.is_chinese_chess_isolated(self.space)
+                    player2_chinese_chess_isolated = self.player2_model.is_chinese_chess_isolated(self.space)
+                    
+                    # 根据新规则：当象棋与本方其他棋子都不接触时，对方获胜
+                    if player1_chinese_chess_isolated:
+                        print("玩家1的象棋与其他棋子不接触，玩家2获胜")
+                        self.current_state = GameState.GAME_OVER
+                        self.winner = 2
+                    elif player2_chinese_chess_isolated:
+                        print("玩家2的象棋与其他棋子不接触，玩家1获胜")
+                        self.current_state = GameState.GAME_OVER
+                        self.winner = 1
+                    if self.player1_model.is_destroyed():
+                        print("玩家1模型被摧毁，玩家2获胜")
+                        self.current_state = GameState.GAME_OVER
+                        self.winner = 2
+                    elif self.player2_model.is_destroyed() and not player2_chinese_chess_isolated:
+                        print("玩家2模型被摧毁，玩家1获胜")
+                        self.current_state = GameState.GAME_OVER
+                        self.winner = 1
+                        
+                    # 如果有判定结果，重置稳定性检查
+                    if self.current_state == GameState.GAME_OVER:
+                        self.pieces_stable = False
+                else:
+                    # 避免频繁打印日志
+                    pass
+                    
+        # 如果弹射物已发射，则不进行胜负判断
+        elif self.current_state == GameState.BATTLE and self.projectile_fired:
+            # 重置稳定性状态，等待弹射物完成后再重新检查
+            if self.pieces_stable:
+                self.pieces_stable = False
+                print("弹射物正在移动，暂停胜负判断")
+        
+        # 检查提示信息是否过期
                 
         # 检查提示信息是否过期
         if self.tip_message and pygame.time.get_ticks() - self.tip_timer >= self.tip_duration:
             self.tip_message = ""
+        
+    def is_all_pieces_stable(self):
+        """检查所有棋子是否处于静止状态
+        
+        通过检查所有棋子的速度和角速度，判断是否所有棋子都已停止运动
+        
+        Returns:
+            bool: 如果所有棋子都处于静止状态，返回True；否则返回False
+        """
+        # 速度阈值，低于此值认为是静止的
+        velocity_threshold = 2.0
+        angular_velocity_threshold = 0.05
+        
+        # 检查玩家1的棋子
+        for piece in self.player1_model.pieces:
+            if hasattr(piece, 'body') and hasattr(piece.body, 'velocity'):
+                if piece.body.velocity.length > velocity_threshold or abs(piece.body.angular_velocity) > angular_velocity_threshold:
+                    return False
+        
+        # 检查玩家2的棋子
+        for piece in self.player2_model.pieces:
+            if hasattr(piece, 'body') and hasattr(piece.body, 'velocity'):
+                if piece.body.velocity.length > velocity_threshold or abs(piece.body.angular_velocity) > angular_velocity_threshold:
+                    return False
+        
+        # 所有棋子都静止
+        return True
         
     def keep_pieces_in_bounds(self):
         """确保所有棋子都在屏幕边界内"""
@@ -543,6 +615,9 @@ class GameManager:
                         self.projectile_placed = False
                         self.projectile_fired = False
                         self.ready_to_switch_player = False
+                        # 切换玩家后重置稳定性检查
+                        self.pieces_stable = False
+                        self.stability_timer = 0
                         self.charging = False
                         self.shoot_strength = 0
                     
@@ -876,6 +951,14 @@ class GameManager:
         pygame.draw.line(screen, (0, 0, 0), 
                         (0, self.screen_height - 50), 
                         (self.screen_width, self.screen_height - 50), 5)
+        
+        # 如果处于战斗阶段，显示棋子稳定状态
+        if self.current_state == GameState.BATTLE and self.pieces_stable:
+            current_time = pygame.time.get_ticks()
+            stability_percent = min(100, int((current_time - self.stability_timer) / self.stability_check_duration * 100))
+            
+            stability_text = self.small_font.render(f"棋子稳定度: {stability_percent}%", True, (0, 0, 255))
+            screen.blit(stability_text, (self.screen_width // 2 - stability_text.get_width() // 2, 80))
                         
         # 绘制玩家棋子
         current_model = self.player1_model if self.current_player == 1 else self.player2_model
@@ -1047,6 +1130,10 @@ class GameManager:
         # 重置弹射物状态
         self.projectile_fired = False
         self.ready_to_switch_player = False
+        
+        # 重置稳定性检查
+        self.pieces_stable = False
+        self.stability_timer = 0
         self.projectile_placed = False
         self.is_dragging_existing_piece = False
         
@@ -1219,9 +1306,13 @@ class GameManager:
         # 重置弹射物状态
         self.projectile_fired = False
         self.ready_to_switch_player = False
+        
+        # 重置稳定性检查
+        self.pieces_stable = False 
+        self.stability_timer = 0
         self.projectile_placed = False
         self.shoot_strength = 0
-        print("战斗阶段准备完毕")
+        print("战斗阶段准备完毕，等待棋子稳定后开始胜负判定")
 
     def start_dragging(self, x, y):
         """开始拖动一个棋子，如果点击在已有棋子上则移动该棋子，否则创建新棋子"""
